@@ -1,0 +1,13 @@
+project_id = "vvjhekkpximazpwdsxgg"
+
+[functions.generate-aptitude-questions]
+verify_jwt = false
+
+[functions.generate-coding-problems] 
+verify_jwt = false
+
+[functions.ai-interview-chat]
+verify_jwt = false
+
+[functions.generate-final-feedback]
+verify_jwt = false

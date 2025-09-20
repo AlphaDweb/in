@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* AI Interview Platform Design System */
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    /* Professional blue primary theme */
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 217 91% 55%;
+
+    --secondary: 213 27% 94%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 213 27% 94%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    /* Purple accent for highlights */
+    --accent: 262 83% 58%;
+    --accent-foreground: 0 0% 100%;
+    --accent-hover: 262 83% 53%;
+
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 217 91% 60%;
+
+    /* Custom design tokens */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    --gradient-hero: linear-gradient(135deg, hsl(217 91% 60%), hsl(262 83% 58%), hsl(217 91% 60%));
+    --gradient-subtle: linear-gradient(180deg, hsl(var(--background)), hsl(213 27% 98%));
+    
+    --shadow-elegant: 0 10px 30px -10px hsl(var(--primary) / 0.2);
+    --shadow-card: 0 4px 20px -4px hsl(var(--primary) / 0.1);
+    --shadow-glow: 0 0 40px hsl(var(--primary) / 0.3);
+
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --primary: 217 91% 65%;
+    --primary-foreground: 0 0% 100%;
+
+    --accent: 262 83% 63%;
+    --accent-foreground: 0 0% 100%;
+
+    --gradient-hero: linear-gradient(135deg, hsl(217 91% 65%), hsl(262 83% 63%), hsl(217 91% 65%));
+    --shadow-elegant: 0 10px 30px -10px hsl(var(--primary) / 0.4);
+  }
+}
+
+@layer components {
+  .hero-gradient {
+    background: var(--gradient-hero);
+  }
+  
+  .card-shadow {
+    box-shadow: var(--shadow-card);
+  }
+  
+  .elegant-shadow {
+    box-shadow: var(--shadow-elegant);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
