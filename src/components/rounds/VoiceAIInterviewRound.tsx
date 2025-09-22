@@ -45,7 +45,6 @@ export default function VoiceAIInterviewRound({
   resumeData,
   projects
 }: VoiceAIInterviewRoundProps) {
-  const MIN_USER_RESPONSES = 6;
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [interviewStarted, setInterviewStarted] = useState(false);
@@ -417,7 +416,7 @@ export default function VoiceAIInterviewRound({
         content: msg.content
       }));
 
-      // If this is the first user response after welcome, ask the first question
+      // If this is the first user response after welcome, ask the first structured question
       if (conversationHistory.length === 1) {
         const firstQuestion = {
           role: 'assistant' as const,
@@ -467,18 +466,11 @@ export default function VoiceAIInterviewRound({
   };
 
   const handleEndInterview = () => {
-    const totalMessages = messages.length;
-    const userMessages = messages.filter(msg => msg.role === 'user').length;
-
-    if (userMessages < MIN_USER_RESPONSES) {
-      toast({
-        title: "Interview Not Complete",
-        description: `Please answer at least ${MIN_USER_RESPONSES} questions before ending the interview.`,
-        variant: "destructive",
-      });
-      return;
-    }
-    const score = Math.min(100, Math.max(60, 60 + (userMessages * 5) + (totalMessages * 2)));
+    const assistantQuestions = Math.max(0, messages.filter(m => m.role === 'assistant').length - 1); // exclude welcome
+    const userAnswers = messages.filter(m => m.role === 'user').length;
+    const totalConsidered = Math.max(assistantQuestions, 1);
+    const answered = Math.min(userAnswers, assistantQuestions);
+    const score = Math.round((answered / totalConsidered) * 100);
     
     setScore(score);
     setInterviewEnded(true);
@@ -503,7 +495,7 @@ export default function VoiceAIInterviewRound({
               Score: {score}%
             </div>
             <p className="text-muted-foreground mb-4">
-              You answered {messages.filter(msg => msg.role === 'user').length} questions during the interview.
+              You answered {Math.min(messages.filter(msg => msg.role === 'user').length, Math.max(0, messages.filter(m => m.role === 'assistant').length - 1))} out of {Math.max(0, messages.filter(m => m.role === 'assistant').length - 1)} questions.
             </p>
             <Button onClick={() => window.location.reload()} variant="outline">
               <RotateCcw className="w-4 h-4 mr-2" />
@@ -714,16 +706,10 @@ export default function VoiceAIInterviewRound({
                     onClick={handleEndInterview}
                     variant="outline"
                     className="w-full"
-                    disabled={messages.filter(m => m.role === 'user').length < MIN_USER_RESPONSES}
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
                     End Interview
                   </Button>
-                  {messages.filter(m => m.role === 'user').length < MIN_USER_RESPONSES && (
-                    <p className="text-xs text-muted-foreground mt-2 text-center">
-                      Answer at least {MIN_USER_RESPONSES} questions to complete the interview.
-                    </p>
-                  )}
                 </div>
               </div>
             </CardContent>

@@ -25,6 +25,22 @@ function collectGeminiKeys(): string[] {
 
 const GEMINI_API_KEYS: string[] = collectGeminiKeys();
 
+// Optional: separate key pool for resume analysis
+function collectResumeGeminiKeys(): string[] {
+  const keys: string[] = [];
+  const csv = (import.meta.env as any).VITE_GEMINI_RESUME_KEYS as string | undefined;
+  if (csv) {
+    csv.split(',').map(k => k.trim()).filter(Boolean).forEach(k => keys.push(k));
+  }
+  for (let i = 1; i <= 20; i++) {
+    const key = (import.meta.env as any)[`VITE_GEMINI_RESUME_KEY${i}`] as string | undefined;
+    if (key) keys.push(key);
+  }
+  return Array.from(new Set(keys));
+}
+
+const GEMINI_RESUME_API_KEYS: string[] = collectResumeGeminiKeys();
+
 // API Selection (Gemini only)
 const getAPIType = (): 'gemini' => {
   if (GEMINI_API_KEYS.length > 0) return 'gemini';
@@ -98,6 +114,16 @@ interface GeminiResponse {
       }>;
     };
   }>;
+}
+
+interface ResumeAnalysisResult {
+  summary: string;
+  years_of_experience: number | null;
+  skills: string[];
+  roles: string[];
+  companies: string[];
+  education: string[];
+  projects: Array<{ title: string; technologies: string[]; description?: string }>;
 }
 
 // OpenAI API Call
@@ -229,6 +255,21 @@ async function callAI(messages: OpenAIMessage[], maxTokens: number = 1000, tempe
   throw lastError || new Error('All Gemini keys failed');
 }
 
+// Internal helper: try a provided keys array (used for resume pool)
+async function callAIWithKeys(keys: string[], messages: OpenAIMessage[], maxTokens: number = 1000, temperature: number = 0.7): Promise<string> {
+  if (!keys || keys.length === 0) return callAI(messages, maxTokens, temperature);
+  let lastError: any = null;
+  for (let i = 0; i < keys.length; i++) {
+    try {
+      return await callGeminiWithKey(keys[i], messages, maxTokens, temperature);
+    } catch (e) {
+      lastError = e;
+      continue;
+    }
+  }
+  throw lastError || new Error('All provided Gemini keys failed');
+}
+
 function cleanJsonResponse(content: string): string {
   // Clean up markdown formatting if present
   if (content.includes('```json')) {
@@ -263,6 +304,40 @@ export async function generateAptitudeQuestions(company: string, role: string) {
   const response = await callAI(messages, 4000, 0.7);
   const cleanedResponse = cleanJsonResponse(response);
   return JSON.parse(cleanedResponse);
+}
+
+// Analyze Resume Text → Structured JSON
+export async function analyzeResumeText(resumeText: string): Promise<ResumeAnalysisResult> {
+  const messages: OpenAIMessage[] = [
+    {
+      role: 'system',
+      content:
+        'You are a precise resume parser. Extract structured data faithfully without inventing facts. If a field is unknown, use null or an empty list. Return ONLY valid JSON matching the schema.'
+    },
+    {
+      role: 'user',
+      content: `Extract a structured summary from this resume text.
+Return JSON with this exact shape:
+{
+  "summary": string,
+  "years_of_experience": number | null,
+  "skills": string[],
+  "roles": string[],
+  "companies": string[],
+  "education": string[],
+  "projects": [
+    { "title": string, "technologies": string[], "description": string }
+  ]
+}
+
+Resume Text:
+${resumeText}`
+    }
+  ];
+
+  const response = await callAIWithKeys(GEMINI_RESUME_API_KEYS, messages, 1200, 0.2);
+  const cleaned = cleanJsonResponse(response);
+  return JSON.parse(cleaned) as ResumeAnalysisResult;
 }
 
 // Generate Coding Problems
@@ -481,6 +556,7 @@ export function getAPIStatus() {
     gemini: geminiAvailable,
     current: getAPIType(),
     keysConfigured: GEMINI_API_KEYS.length,
+    resumeKeysConfigured: GEMINI_RESUME_API_KEYS.length,
     activeKeyIndex: activeIndex,
     fallback: GEMINI_API_KEYS.length > 1
   };
