@@ -1,16 +1,70 @@
 // AI Service - Supports both OpenAI and Gemini APIs
 
 // Configuration
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const OPENAI_API_KEY = undefined; // OpenAI disabled
 const GEMINI_API_URL = import.meta.env.VITE_GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
-// API Selection (default to OpenAI, fallback to Gemini)
-const getAPIType = (): 'openai' | 'gemini' => {
-  if (OPENAI_API_KEY) return 'openai';
-  if (GEMINI_API_KEY) return 'gemini';
-  throw new Error('No AI API key configured. Please set VITE_OPENAI_API_KEY or VITE_GEMINI_API_KEY');
+// Collect Gemini API keys from env
+function collectGeminiKeys(): string[] {
+  const keys: string[] = [];
+  const csv = (import.meta.env as any).VITE_GEMINI_API_KEYS as string | undefined;
+  if (csv) {
+    csv.split(',').map(k => k.trim()).filter(Boolean).forEach(k => keys.push(k));
+  }
+  // Also support numbered keys VITE_GEMINI_API_KEY1..VITE_GEMINI_API_KEY20
+  for (let i = 1; i <= 20; i++) {
+    const key = (import.meta.env as any)[`VITE_GEMINI_API_KEY${i}`] as string | undefined;
+    if (key) keys.push(key);
+  }
+  // Backward compat: single VITE_GEMINI_API_KEY
+  const single = (import.meta.env as any).VITE_GEMINI_API_KEY as string | undefined;
+  if (single) keys.push(single);
+  // De-duplicate
+  return Array.from(new Set(keys));
+}
+
+const GEMINI_API_KEYS: string[] = collectGeminiKeys();
+
+// API Selection (Gemini only)
+const getAPIType = (): 'gemini' => {
+  if (GEMINI_API_KEYS.length > 0) return 'gemini';
+  throw new Error('No AI API key configured. Please set VITE_GEMINI_API_KEYS or VITE_GEMINI_API_KEY1..n');
 };
+
+// Session-based key assignment and rotation
+const SESSION_KEY = 'gemini_session_key_index';
+const DEVICE_RR_KEY = 'gemini_device_rr_index';
+
+function getOrCreateSessionKeyIndex(total: number): number {
+  if (total <= 0) return 0;
+  try {
+    const existing = sessionStorage.getItem(SESSION_KEY);
+    if (existing !== null) {
+      const idx = parseInt(existing, 10);
+      if (!Number.isNaN(idx) && idx >= 0 && idx < total) return idx;
+    }
+    // Round-robin per device
+    let deviceIndex = 0;
+    const raw = localStorage.getItem(DEVICE_RR_KEY);
+    if (raw !== null) {
+      const parsed = parseInt(raw, 10);
+      if (!Number.isNaN(parsed)) deviceIndex = parsed;
+    }
+    const newIndex = (deviceIndex + 1) % total;
+    localStorage.setItem(DEVICE_RR_KEY, String(newIndex));
+    sessionStorage.setItem(SESSION_KEY, String(newIndex));
+    return newIndex;
+  } catch {
+    // Fallback without storage
+    return 0;
+  }
+}
+
+function setSessionKeyIndex(index: number) {
+  try {
+    sessionStorage.setItem(SESSION_KEY, String(index));
+  } catch {}
+}
 
 // Interfaces
 interface OpenAIMessage {
@@ -76,8 +130,8 @@ async function callOpenAI(messages: OpenAIMessage[], maxTokens: number = 1000, t
 }
 
 // Gemini API Call
-async function callGemini(messages: OpenAIMessage[], maxTokens: number = 1000, temperature: number = 0.7): Promise<string> {
-  if (!GEMINI_API_KEY) {
+async function callGeminiWithKey(apiKey: string, messages: OpenAIMessage[], maxTokens: number = 1000, temperature: number = 0.7): Promise<string> {
+  if (!apiKey) {
     throw new Error('Gemini API key not configured');
   }
 
@@ -109,7 +163,7 @@ async function callGemini(messages: OpenAIMessage[], maxTokens: number = 1000, t
     }
   }
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -132,28 +186,47 @@ async function callGemini(messages: OpenAIMessage[], maxTokens: number = 1000, t
   return data.candidates[0].content.parts[0].text;
 }
 
-// Universal API Call
+// Universal API Call (Gemini only with multi-key failover)
 async function callAI(messages: OpenAIMessage[], maxTokens: number = 1000, temperature: number = 0.7): Promise<string> {
-  const apiType = getAPIType();
-  
-  try {
-    if (apiType === 'openai') {
-      return await callOpenAI(messages, maxTokens, temperature);
-    } else {
-      return await callGemini(messages, maxTokens, temperature);
-    }
-  } catch (error) {
-    // If primary API fails, try the other one
-    console.warn(`Primary API (${apiType}) failed, trying fallback:`, error);
-    
-    if (apiType === 'openai' && GEMINI_API_KEY) {
-      return await callGemini(messages, maxTokens, temperature);
-    } else if (apiType === 'gemini' && OPENAI_API_KEY) {
-      return await callOpenAI(messages, maxTokens, temperature);
-    }
-    
-    throw error;
+  if (GEMINI_API_KEYS.length === 0) {
+    throw new Error('No Gemini API keys configured');
   }
+
+  // Determine starting key for this session
+  let startIndex = getOrCreateSessionKeyIndex(GEMINI_API_KEYS.length);
+
+  // Try keys in a circular manner, starting from session index
+  let lastError: any = null;
+  for (let attempt = 0; attempt < GEMINI_API_KEYS.length; attempt++) {
+    const keyIndex = (startIndex + attempt) % GEMINI_API_KEYS.length;
+    const apiKey = GEMINI_API_KEYS[keyIndex];
+    try {
+      const result = await callGeminiWithKey(apiKey, messages, maxTokens, temperature);
+      // Persist successful key for the session
+      setSessionKeyIndex(keyIndex);
+      return result;
+    } catch (error: any) {
+      lastError = error;
+      const msg = String(error?.message || '').toLowerCase();
+      // On quota/rate/auth/network errors, continue to next key
+      const shouldFailover =
+        msg.includes('quota') ||
+        msg.includes('rate') ||
+        msg.includes('exceed') ||
+        msg.includes('429') ||
+        msg.includes('permission') ||
+        msg.includes('key') ||
+        msg.includes('unauthorized') ||
+        msg.includes('network') ||
+        msg.includes('unavailable');
+      if (!shouldFailover) {
+        // If error seems unrelated, stop early
+        break;
+      }
+      // else try next key
+    }
+  }
+  throw lastError || new Error('All Gemini keys failed');
 }
 
 function cleanJsonResponse(content: string): string {
@@ -395,13 +468,20 @@ Please evaluate this code solution and provide detailed feedback.`
 
 // Get current API status
 export function getAPIStatus() {
-  const openaiAvailable = !!OPENAI_API_KEY;
-  const geminiAvailable = !!GEMINI_API_KEY;
+  const geminiAvailable = GEMINI_API_KEYS.length > 0;
+  let activeIndex: number | null = null;
+  try {
+    const existing = sessionStorage.getItem(SESSION_KEY);
+    activeIndex = existing !== null ? parseInt(existing, 10) : null;
+  } catch {
+    activeIndex = null;
+  }
   
   return {
-    openai: openaiAvailable,
     gemini: geminiAvailable,
     current: getAPIType(),
-    fallback: openaiAvailable && geminiAvailable
+    keysConfigured: GEMINI_API_KEYS.length,
+    activeKeyIndex: activeIndex,
+    fallback: GEMINI_API_KEYS.length > 1
   };
 }

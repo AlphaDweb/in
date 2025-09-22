@@ -69,7 +69,7 @@ const CodingRound: React.FC<CodingRoundProps> = ({ company, role, sessionId, onR
       console.error('Error loading problems:', error);
       toast({
         title: "Error",
-        description: "Failed to load coding problems. Please check your OpenAI API key.",
+        description: "Failed to load coding problems. Please check your AI configuration (Gemini).",
         variant: "destructive",
       });
     }
