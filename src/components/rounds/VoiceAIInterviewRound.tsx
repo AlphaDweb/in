@@ -45,6 +45,7 @@ export default function VoiceAIInterviewRound({
   resumeData,
   projects
 }: VoiceAIInterviewRoundProps) {
+  const MIN_USER_RESPONSES = 6;
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [interviewStarted, setInterviewStarted] = useState(false);
@@ -468,6 +469,15 @@ export default function VoiceAIInterviewRound({
   const handleEndInterview = () => {
     const totalMessages = messages.length;
     const userMessages = messages.filter(msg => msg.role === 'user').length;
+
+    if (userMessages < MIN_USER_RESPONSES) {
+      toast({
+        title: "Interview Not Complete",
+        description: `Please answer at least ${MIN_USER_RESPONSES} questions before ending the interview.`,
+        variant: "destructive",
+      });
+      return;
+    }
     const score = Math.min(100, Math.max(60, 60 + (userMessages * 5) + (totalMessages * 2)));
     
     setScore(score);
@@ -704,10 +714,16 @@ export default function VoiceAIInterviewRound({
                     onClick={handleEndInterview}
                     variant="outline"
                     className="w-full"
+                    disabled={messages.filter(m => m.role === 'user').length < MIN_USER_RESPONSES}
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
                     End Interview
                   </Button>
+                  {messages.filter(m => m.role === 'user').length < MIN_USER_RESPONSES && (
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                      Answer at least {MIN_USER_RESPONSES} questions to complete the interview.
+                    </p>
+                  )}
                 </div>
               </div>
             </CardContent>
