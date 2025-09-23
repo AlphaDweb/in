@@ -467,14 +467,38 @@ export default function VoiceAIInterviewRound({
 
   const handleEndInterview = () => {
     const assistantQuestions = Math.max(0, messages.filter(m => m.role === 'assistant').length - 1); // exclude welcome
-    const userAnswers = messages.filter(m => m.role === 'user').length;
-    const totalConsidered = Math.max(assistantQuestions, 1);
-    const answered = Math.min(userAnswers, assistantQuestions);
-    const score = Math.round((answered / totalConsidered) * 100);
-    
-    setScore(score);
+    const userMessages = messages.filter(m => m.role === 'user');
+    const userAnswers = userMessages.length;
+
+    // No questions asked or no answers => score 0
+    if (assistantQuestions === 0 || userAnswers === 0) {
+      setScore(0);
+      setInterviewEnded(true);
+      onRoundComplete(0);
+      return;
+    }
+
+    // Completion component: proportion of questions answered
+    const completionRatio = Math.min(1, Math.max(0, userAnswers / assistantQuestions));
+
+    // Depth component: average words per answer (normalized to ~30 words target)
+    const wordsPerAnswer: number[] = userMessages.map(m => (m.content || '').trim().split(/\s+/).filter(Boolean).length);
+    const avgWords = wordsPerAnswer.length ? (wordsPerAnswer.reduce((a, b) => a + b, 0) / wordsPerAnswer.length) : 0;
+    const depthRatio = Math.min(1, Math.max(0, avgWords / 30));
+
+    // Combine with weights
+    const rawScore = 0.6 * completionRatio + 0.4 * depthRatio;
+    let calculated = Math.round(rawScore * 100);
+
+    // Cap score for very short sessions
+    if (userAnswers === 1) calculated = Math.min(calculated, 35);
+    else if (userAnswers === 2) calculated = Math.min(calculated, 55);
+
+    calculated = Math.min(100, Math.max(0, calculated));
+
+    setScore(calculated);
     setInterviewEnded(true);
-    onRoundComplete(score);
+    onRoundComplete(calculated);
   };
 
   if (interviewEnded) {

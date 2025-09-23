@@ -61,7 +61,7 @@ const FinalResults: React.FC<FinalResultsProps> = ({
       console.error('Error generating feedback:', error);
       toast({
         title: "Error",
-        description: "Failed to generate detailed feedback. Please check your OpenAI API key.",
+        description: "Failed to generate detailed feedback. Please check your Gemini API key.",
         variant: "destructive",
       });
       

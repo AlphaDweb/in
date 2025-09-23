@@ -53,7 +53,7 @@ const AptitudeRound: React.FC<AptitudeRoundProps> = ({ company, role, sessionId,
       console.error('Error loading questions:', error);
       toast({
         title: "Error",
-        description: "Failed to load questions. Please check your OpenAI API key.",
+        description: "Failed to load questions. Please check your Gemini API key.",
         variant: "destructive",
       });
     }
