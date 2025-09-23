@@ -536,7 +536,7 @@ export default function VoiceAIInterviewRound({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Interview Chat */}
         <div className="lg:col-span-2">
-          <Card className="h-[600px] flex flex-col">
+          <Card className="h-[75vh] md:h-[600px] flex flex-col">
             <CardHeader className="flex-shrink-0">
               <CardTitle className="flex items-center">
                 <MessageSquare className="w-5 h-5 mr-2" />
@@ -546,10 +546,10 @@ export default function VoiceAIInterviewRound({
                 {interviewStarted ? 'Answer the questions below' : 'Click Start Interview to begin'}
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col p-0">
+            <CardContent className="flex-1 flex flex-col p-0 min-h-0">
               {/* Messages Area - Scrollable */}
-              <div className="flex-1 p-6">
-                <ScrollArea className="h-[400px] pr-4">
+              <div className="flex-1 p-6 min-h-0">
+                <ScrollArea className="h-full pr-4">
                   <div className="space-y-4">
                     {messages.map((message, index) => (
                       <div
@@ -609,8 +609,8 @@ export default function VoiceAIInterviewRound({
                 </div>
               )}
 
-              {/* Controls Area - Fixed at bottom */}
-              <div className="border-t bg-gray-50 p-6 space-y-4">
+              {/* Controls Area - Sticky on mobile to keep actions visible */}
+              <div className="border-t bg-gray-50 p-4 md:p-6 space-y-4 sticky bottom-0">
                 {/* Error Messages */}
                 {speechRecognitionError && (
                   <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
@@ -645,7 +645,7 @@ export default function VoiceAIInterviewRound({
                 )}
 
                 {/* Voice Controls */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   <Button
                     onClick={isListening ? stopListening : startListening}
                     disabled={isLoading || microphonePermission === 'denied' || !speechRecognitionSupported}
@@ -703,7 +703,7 @@ export default function VoiceAIInterviewRound({
                         value={textInput}
                         onChange={(e) => setTextInput(e.target.value)}
                         placeholder="Type your answer here..."
-                        className="w-full mt-1 p-2 border rounded-md resize-none"
+                        className="w-full mt-1 p-2 border rounded-md resize-y md:resize-none"
                         rows={3}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && !e.shiftKey) {
@@ -724,17 +724,17 @@ export default function VoiceAIInterviewRound({
                   </div>
                 )}
 
-                {/* End Interview Button */}
-                <div className="pt-2 border-t">
-                  <Button
-                    onClick={handleEndInterview}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    End Interview
-                  </Button>
-                </div>
+              {/* End Interview Button - Always visible and large on mobile */}
+              <div className="pt-2 border-t">
+                <Button
+                  onClick={handleEndInterview}
+                  variant="default"
+                  className="w-full h-12 text-base"
+                >
+                  <CheckCircle className="w-5 h-5 mr-2" />
+                  End Interview
+                </Button>
+              </div>
               </div>
             </CardContent>
           </Card>
