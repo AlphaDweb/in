@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // Get single Gemini API key from environment
 const GEMINI_API_KEY = process.env.VITE_GEMINI_API_KEY1 || process.env.VITE_GEMINI_API_KEY;
-let GEMINI_API_URL = process.env.VITE_GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash';
+let GEMINI_API_URL = process.env.VITE_GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash';
 if (!GEMINI_API_URL.includes(':generateContent')) {
     GEMINI_API_URL += ':generateContent';
 }

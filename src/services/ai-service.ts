@@ -54,7 +54,7 @@ async function callGemini(messages: Message[], maxTokens: number = 1000, tempera
 
   // 2. Fallback for Local Development (npm run dev)
   const localApiKey = import.meta.env.VITE_GEMINI_API_KEY1 || import.meta.env.VITE_GEMINI_API_KEY;
-  let localApiUrl = import.meta.env.VITE_GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash';
+  let localApiUrl = import.meta.env.VITE_GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash';
 
   if (!localApiKey) {
     throw new Error('Gemini API key not configured. Please check your .env file.');
