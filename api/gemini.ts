@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-// Get single Gemini API key from environment
-const GEMINI_API_KEY = process.env.VITE_GEMINI_API_KEY1 || process.env.VITE_GEMINI_API_KEY;
-let GEMINI_API_URL = process.env.VITE_GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash';
+// Get Gemini API key from environment
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY1 || process.env.VITE_GEMINI_API_KEY;
+let GEMINI_API_URL = process.env.VITE_GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview';
 if (!GEMINI_API_URL.includes(':generateContent')) {
     GEMINI_API_URL += ':generateContent';
 }
@@ -54,11 +54,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         }
 
-        // Call Gemini API
-        const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+        // Call Gemini API using header for better security
+        const response = await fetch(GEMINI_API_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'x-goog-api-key': GEMINI_API_KEY
             },
             body: JSON.stringify({
                 contents: geminiMessages,
@@ -70,18 +71,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            const errorMessage = error.error?.message || 'Unknown error';
-            return res.status(response.status).json({
-                error: `Gemini API error: ${errorMessage}`
-            });
+            const errorData = await response.json() as any;
+            throw new Error(errorData.error?.message || `Gemini API Error: ${response.status}`);
         }
 
-        const data = await response.json();
+        const data = await response.json() as any;
+        if (!data.candidates || !data.candidates[0].content.parts[0].text) {
+            throw new Error('Unexpected response format from Gemini API');
+        }
 
-        // Return the response
         return res.status(200).json({
-            text: data.candidates[0].content.parts[0].text
+            text: data.candidates[0].content.parts[0].text,
+            keyIndex: 0,
+            totalKeys: 1
         });
 
     } catch (error: any) {

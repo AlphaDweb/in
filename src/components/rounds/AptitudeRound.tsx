@@ -25,7 +25,7 @@ const AptitudeRound: React.FC<AptitudeRoundProps> = ({ company, role, sessionId,
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<{ [key: number]: string }>({});
-  const [timeLeft, setTimeLeft] = useState(45 * 60); // 45 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState(30 * 60); // 30 minutes in seconds
   const [loading, setLoading] = useState(true);
   const [showResults, setShowResults] = useState(false);
   const [score, setScore] = useState(0);
@@ -51,6 +51,7 @@ const AptitudeRound: React.FC<AptitudeRoundProps> = ({ company, role, sessionId,
       setLoading(false);
     } catch (error) {
       console.error('Error loading questions:', error);
+      setLoading(false);
       toast({
         title: "Error",
         description: "Failed to load questions. Please check your Gemini API key.",
@@ -88,11 +89,32 @@ const AptitudeRound: React.FC<AptitudeRoundProps> = ({ company, role, sessionId,
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-lg">Generating your aptitude questions...</p>
+          <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold mb-2">Generating Questions</h2>
+          <p className="text-muted-foreground">Generating 30 custom aptitude questions for you...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (questions.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="max-w-md w-full text-center p-8">
+          <div className="bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Clock className="w-8 h-8 text-red-600" />
+          </div>
+          <h2 className="text-xl font-bold mb-2">API is Busy</h2>
+          <p className="text-muted-foreground mb-6">
+            Gemini is currently experiencing high traffic or your quota is temporarily exceeded.
+            Please wait a few seconds and try again.
+          </p>
+          <Button onClick={loadQuestions} className="w-full">
+            Retry Generating Questions
+          </Button>
+        </Card>
       </div>
     );
   }
@@ -140,7 +162,7 @@ const AptitudeRound: React.FC<AptitudeRoundProps> = ({ company, role, sessionId,
               {formatTime(timeLeft)}
             </Badge>
             <Badge variant="secondary" className="text-lg px-3 py-1">
-              {currentQuestionIndex + 1} / {questions.length}
+              {currentQuestionIndex + 1} / {questions?.length || 0}
             </Badge>
           </div>
         </div>
@@ -153,11 +175,11 @@ const AptitudeRound: React.FC<AptitudeRoundProps> = ({ company, role, sessionId,
         </CardHeader>
         <CardContent>
           <div className="mb-6">
-            <p className="text-lg leading-relaxed">{currentQuestion.question}</p>
+            <p className="text-lg leading-relaxed">{currentQuestion?.question || "Loading question..."}</p>
           </div>
-          
+
           <div className="space-y-3">
-            {currentQuestion.options.map((option, index) => (
+            {currentQuestion?.options?.map((option, index) => (
               <Button
                 key={index}
                 variant={selectedAnswers[currentQuestionIndex] === option.charAt(0) ? "default" : "outline"}
@@ -177,7 +199,7 @@ const AptitudeRound: React.FC<AptitudeRoundProps> = ({ company, role, sessionId,
             >
               Previous
             </Button>
-            
+
             {currentQuestionIndex === questions.length - 1 ? (
               <Button
                 onClick={handleSubmit}

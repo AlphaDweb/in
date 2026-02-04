@@ -22,6 +22,8 @@ import CodingRound from "@/components/rounds/CodingRound";
 import VoiceAIInterviewRound from "@/components/rounds/VoiceAIInterviewRound";
 import FinalResults from "@/components/FinalResults";
 import { useToast } from "@/components/ui/use-toast";
+import { dbService } from "@/services/db-service";
+import { supabase } from "@/integrations/supabase/client";
 
 const Dashboard = () => {
   const [currentStep, setCurrentStep] = useState("setup");
@@ -31,7 +33,7 @@ const Dashboard = () => {
   const [resumeData, setResumeData] = useState<string>("");
   const [projects, setProjects] = useState<string[]>([]);
   const [currentRound, setCurrentRound] = useState("");
-  const [sessionId] = useState(() => `session_${Date.now()}_${Math.random()}`);
+  const [sessionId, setSessionId] = useState<string>("");
   const [roundScores, setRoundScores] = useState<{ [key: string]: number }>({});
   const { toast } = useToast();
 
@@ -46,17 +48,23 @@ const Dashboard = () => {
 
   const handleRoundComplete = (roundId: string, score: number) => {
     setRoundScores(prev => ({ ...prev, [roundId]: score }));
-    setCompletedRounds(prev => [...prev, roundId]);
 
-    // Check if all rounds are completed
-    const newCompletedRounds = [...completedRounds, roundId];
+    setCompletedRounds(prev => {
+      if (prev.includes(roundId)) return prev;
+      const next = [...prev, roundId];
 
-    if (newCompletedRounds.length === 3) {
-      // All rounds completed, show final results
-      setCurrentStep("finalResults");
-    } else {
-      // Return to rounds overview
-      setCurrentStep("rounds");
+      // Navigate based on updated list
+      if (next.length === 3) {
+        setCurrentStep("finalResults");
+      } else {
+        setCurrentStep("rounds");
+      }
+      return next;
+    });
+
+    // Save to DB
+    if (sessionId && !sessionId.startsWith('session_')) {
+      dbService.saveRoundResult(sessionId, roundId, score).catch(console.error);
     }
 
     toast({
@@ -71,8 +79,8 @@ const Dashboard = () => {
       title: "Aptitude Round",
       description: "Company-specific aptitude questions",
       icon: FileText,
-      duration: "45 minutes",
-      questions: 25,
+      duration: "30 minutes",
+      questions: 30,
       status: canStartRounds && !completedRounds.includes("aptitude") ? "available" : completedRounds.includes("aptitude") ? "completed" : "locked",
       score: roundScores.aptitude || null
     },
@@ -81,7 +89,7 @@ const Dashboard = () => {
       title: "Coding Round",
       description: "Programming challenges tailored to your role",
       icon: Code,
-      duration: "90 minutes",
+      duration: "30 minutes",
       questions: 3,
       status: completedRounds.includes("aptitude") && !completedRounds.includes("coding") ? "available" : completedRounds.includes("coding") ? "completed" : "locked",
       score: roundScores.coding || null
@@ -91,7 +99,7 @@ const Dashboard = () => {
       title: "AI Mock Interview",
       description: "Technical and HR interview simulation",
       icon: MessageSquare,
-      duration: "60 minutes",
+      duration: "10 minutes",
       questions: "Dynamic",
       status: completedRounds.includes("coding") && !completedRounds.includes("interview") ? "available" : completedRounds.includes("interview") ? "completed" : "locked",
       score: roundScores.interview || null
@@ -131,7 +139,30 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <Button
-                onClick={() => setCurrentStep("rounds")}
+                onClick={async () => {
+                  try {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    const userId = user?.id || '00000000-0000-0000-0000-000000000000';
+                    console.log("[Dashboard] Creating interview for user:", userId);
+                    const interview = await dbService.createInterview(userId, selectedCompany, selectedRole);
+                    setSessionId(interview.id);
+                    setCurrentStep("rounds");
+                    toast({
+                      title: "Database Connected",
+                      description: "Your interview progress is being saved.",
+                    });
+                  } catch (error: any) {
+                    console.error("Error creating interview:", error);
+                    const fallbackId = `session_${Date.now()}`;
+                    setSessionId(fallbackId);
+                    setCurrentStep("rounds");
+                    toast({
+                      title: "Offline Mode",
+                      description: `Could not save to database (${error.message || 'RLS Error'}). Your progress will be temporary.`,
+                      variant: "destructive"
+                    });
+                  }
+                }}
                 className="w-full"
                 size="lg"
               >
@@ -261,6 +292,7 @@ const Dashboard = () => {
             onRoundComplete={(score) => handleRoundComplete("interview", score)}
             resumeData={resumeData}
             projects={projects}
+            scores={roundScores}
           />
         );
       default:

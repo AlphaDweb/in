@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Clock, Code, Play, CheckCircle, ArrowRight } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { generateCodingProblems, evaluateCodeSolution } from '@/services/ai-service';
+import { generateCodingProblems, evaluateCodeSolution, validateCodeStructure } from '@/services/ai-service';
 
 interface Problem {
   title: string;
@@ -30,13 +30,15 @@ const CodingRound: React.FC<CodingRoundProps> = ({ company, role, sessionId, onR
   const [currentProblemIndex, setCurrentProblemIndex] = useState(0);
   const [solutions, setSolutions] = useState<{ [key: number]: string }>({});
   const [selectedLanguage, setSelectedLanguage] = useState('python');
-  const [timeLeft, setTimeLeft] = useState(90 * 60); // 90 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState(30 * 60); // 30 minutes in seconds
   const [loading, setLoading] = useState(true);
   const [showResults, setShowResults] = useState(false);
   const [score, setScore] = useState(0);
   const [testResults, setTestResults] = useState<{ [key: number]: boolean }>({});
   const [evaluationResults, setEvaluationResults] = useState<{ [key: number]: any }>({});
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [isValidated, setIsValidated] = useState<{ [key: number]: boolean }>({});
+  const [validationError, setValidationError] = useState<{ [key: number]: string | null }>({});
   const { toast } = useToast();
 
   const languages = [
@@ -80,6 +82,54 @@ const CodingRound: React.FC<CodingRoundProps> = ({ company, role, sessionId, onR
       ...prev,
       [problemIndex]: code
     }));
+    // Reset validation when code changes
+    setIsValidated(prev => ({ ...prev, [problemIndex]: false }));
+    setValidationError(prev => ({ ...prev, [problemIndex]: null }));
+  };
+
+  const handleEvaluate = async () => {
+    const currentSolution = solutions[currentProblemIndex] || '';
+    const currentProblem = problems[currentProblemIndex];
+
+    if (!currentSolution.trim()) {
+      toast({
+        title: "No Code",
+        description: "Please write some code before evaluating.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsEvaluating(true);
+    try {
+      const result = await validateCodeStructure(currentSolution, currentProblem.title, currentProblem.description, selectedLanguage);
+
+      if (result.is_valid) {
+        setIsValidated(prev => ({ ...prev, [currentProblemIndex]: true }));
+        setValidationError(prev => ({ ...prev, [currentProblemIndex]: null }));
+        toast({
+          title: "Code Validated ✅",
+          description: "No syntax errors found. You can now run test cases.",
+        });
+      } else {
+        setIsValidated(prev => ({ ...prev, [currentProblemIndex]: false }));
+        setValidationError(prev => ({ ...prev, [currentProblemIndex]: result.error_message }));
+        toast({
+          title: "Validation Failed ❌",
+          description: result.error_message,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Evaluation error:", error);
+      toast({
+        title: "Evaluation Error",
+        description: "Failed to validate code structure. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsEvaluating(false);
+    }
   };
 
   const testCode = async () => {
@@ -307,18 +357,32 @@ const CodingRound: React.FC<CodingRoundProps> = ({ company, role, sessionId, onR
               </SelectContent>
             </Select>
 
-            <Button onClick={testCode} variant="outline" disabled={isEvaluating}>
+            <Button
+              onClick={handleEvaluate}
+              variant={isValidated[currentProblemIndex] ? "secondary" : "default"}
+              disabled={isEvaluating}
+            >
               {isEvaluating ? (
                 <>
                   <div className="animate-spin w-4 h-4 mr-2 border-2 border-primary border-t-transparent rounded-full" />
-                  Evaluating...
+                  Analyzing...
                 </>
               ) : (
                 <>
-                  <Play className="w-4 h-4 mr-2" />
-                  Test Code
+                  <Code className="w-4 h-4 mr-2" />
+                  Evaluate Code
                 </>
               )}
+            </Button>
+
+            <Button
+              onClick={testCode}
+              variant="outline"
+              disabled={isEvaluating || !isValidated[currentProblemIndex]}
+              className={!isValidated[currentProblemIndex] ? "opacity-50 cursor-not-allowed" : ""}
+            >
+              <Play className="w-4 h-4 mr-2" />
+              Run Test Cases
             </Button>
 
             {testResults[currentProblemIndex] && (
@@ -329,16 +393,24 @@ const CodingRound: React.FC<CodingRoundProps> = ({ company, role, sessionId, onR
             )}
           </div>
 
-          <Card className="flex-1">
-            <CardContent className="p-0">
+          <Card className="flex-1 overflow-hidden">
+            <CardContent className="p-0 h-full">
               <Textarea
                 value={solutions[currentProblemIndex] || getLanguageTemplate(selectedLanguage)}
                 onChange={(e) => handleCodeChange(currentProblemIndex, e.target.value)}
-                className="min-h-[400px] font-mono text-sm border-0 resize-none"
+                className="min-h-[400px] h-full font-mono text-sm border-0 resize-none focus-visible:ring-0 p-4 bg-gray-950 text-gray-100"
                 placeholder={getLanguageTemplate(selectedLanguage)}
               />
             </CardContent>
           </Card>
+
+          {validationError[currentProblemIndex] && (
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p className="text-xs text-red-500 font-mono whitespace-pre-wrap">
+                <strong>Syntax/Logic Error:</strong> {validationError[currentProblemIndex]}
+              </p>
+            </div>
+          )}
 
           {/* Evaluation Results */}
           {evaluationResults[currentProblemIndex] && (

@@ -127,7 +127,7 @@ const ResumeUpload = ({ resumeUploaded, setResumeUploaded, setResumeData, setPro
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const files = Array.from(e.dataTransfer.files);
     handleFileUpload(files[0]);
   };
@@ -177,8 +177,10 @@ const ResumeUpload = ({ resumeUploaded, setResumeUploaded, setResumeData, setPro
         setResumeUploaded(true);
         try {
           const analysis = await analyzeResumeText(extracted);
-          const summary = analysis.summary || extracted.slice(0, 800);
-          if (setResumeData) setResumeData(summary);
+          if (setResumeData) {
+            const resumeContext = `Summary: ${analysis.summary}\nSkills: ${analysis.skills?.join(', ')}\nExperience: ${analysis.years_of_experience} years\nRoles: ${analysis.roles?.join(', ')}`;
+            setResumeData(resumeContext);
+          }
           if (setProjects) setProjects(
             (analysis.projects || []).map(p => p.title || '').filter(Boolean)
           );
@@ -236,11 +238,10 @@ const ResumeUpload = ({ resumeUploaded, setResumeUploaded, setResumeData, setPro
       <CardContent>
         {!resumeUploaded ? (
           <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-300 ${
-              isDragging 
-                ? 'border-primary bg-primary/5' 
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-300 ${isDragging
+                ? 'border-primary bg-primary/5'
                 : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5'
-            }`}
+              }`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -292,13 +293,13 @@ const ResumeUpload = ({ resumeUploaded, setResumeUploaded, setResumeData, setPro
               <CheckCircle className="h-4 w-4 text-success" />
               <span className="text-sm font-medium text-success">Resume Analyzed</span>
             </div>
-            
+
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">File:</span>
                 <Badge variant="secondary">{uploadedFile?.name}</Badge>
               </div>
-              
+
               <div className="text-sm">
                 <p className="font-medium mb-2">Extracted Resume Text:</p>
                 {extractedText ? (
@@ -338,10 +339,10 @@ const ResumeUpload = ({ resumeUploaded, setResumeUploaded, setResumeData, setPro
                 )}
               </div>
             </div>
-            
-            <Button 
-              variant="outline" 
-              size="sm" 
+
+            <Button
+              variant="outline"
+              size="sm"
               className="mt-3"
               onClick={() => {
                 setResumeUploaded(false);

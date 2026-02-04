@@ -3,16 +3,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  Clock, 
-  MessageSquare, 
-  Mic, 
-  MicOff, 
-  Volume2, 
-  VolumeX, 
-  Bot, 
-  User, 
-  CheckCircle, 
+import {
+  Clock,
+  MessageSquare,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  Bot,
+  User,
+  CheckCircle,
   ArrowRight,
   Play,
   Pause,
@@ -20,7 +20,7 @@ import {
   Send
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { generateAIInterviewResponse } from '@/services/ai-service';
+import { generateAIInterviewResponse, evaluateInterviewPerformance } from '@/services/ai-service';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -35,6 +35,7 @@ interface VoiceAIInterviewRoundProps {
   onRoundComplete: (score: number) => void;
   resumeData?: string;
   projects?: string[];
+  scores?: { aptitude?: number; coding?: number };
 }
 
 export default function VoiceAIInterviewRound({
@@ -43,7 +44,8 @@ export default function VoiceAIInterviewRound({
   sessionId,
   onRoundComplete,
   resumeData,
-  projects
+  projects,
+  scores
 }: VoiceAIInterviewRoundProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,17 +56,43 @@ export default function VoiceAIInterviewRound({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [currentTranscript, setCurrentTranscript] = useState('');
+  const [fullTranscript, setFullTranscript] = useState('');
   const [textInput, setTextInput] = useState('');
   const [showTextInput, setShowTextInput] = useState(false);
   const [microphonePermission, setMicrophonePermission] = useState<'granted' | 'denied' | 'prompt' | 'unknown'>('unknown');
   const [speechRecognitionSupported, setSpeechRecognitionSupported] = useState(false);
   const [speechRecognitionError, setSpeechRecognitionError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  
+  const [timeLeft, setTimeLeft] = useState(10 * 60); // 10 minutes in seconds
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const synthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (interviewStarted && !interviewEnded && timeLeft > 0) {
+      timerRef.current = setInterval(() => {
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            handleEndInterview();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [interviewStarted, interviewEnded]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   useEffect(() => {
     scrollToBottom();
@@ -94,42 +122,41 @@ export default function VoiceAIInterviewRound({
     try {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false;
+      recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'en-US';
 
       recognitionRef.current.onstart = () => {
         setIsListening(true);
         setCurrentTranscript('');
+        setFullTranscript('');
       };
 
       recognitionRef.current.onresult = (event) => {
-        let finalTranscript = '';
         let interimTranscript = '';
+        let finalTranscriptForTurn = '';
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            finalTranscript += transcript;
+            finalTranscriptForTurn += transcript + ' ';
           } else {
             interimTranscript += transcript;
           }
         }
 
         setCurrentTranscript(interimTranscript);
-        
-        if (finalTranscript) {
-          setCurrentTranscript('');
-          handleVoiceInput(finalTranscript);
+        if (finalTranscriptForTurn) {
+          setFullTranscript(prev => prev + finalTranscriptForTurn);
         }
       };
 
       recognitionRef.current.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         setIsListening(false);
-        
+
         let errorMessage = "Failed to recognize speech. Please try again.";
-        
+
         switch (event.error) {
           case 'no-speech':
             errorMessage = "No speech detected. Please speak clearly and try again.";
@@ -152,7 +179,7 @@ export default function VoiceAIInterviewRound({
           default:
             errorMessage = `Speech recognition error: ${event.error}. Please try again.`;
         }
-        
+
         setSpeechRecognitionError(errorMessage);
         toast({
           title: "Voice Recognition Error",
@@ -193,8 +220,8 @@ export default function VoiceAIInterviewRound({
   };
 
   const speakText = (text: string) => {
-    if (!isVoiceEnabled) return;
-    
+    if (!isVoiceEnabled || isListening) return;
+
     speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.9;
@@ -204,7 +231,7 @@ export default function VoiceAIInterviewRound({
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
-    
+
     synthesisRef.current = utterance;
     speechSynthesis.speak(utterance);
   };
@@ -231,20 +258,24 @@ export default function VoiceAIInterviewRound({
 
     if (recognitionRef.current && !isListening) {
       try {
+        // Stop any AI speech immediately when user starts speaking
+        speechSynthesis.cancel();
+        setIsSpeaking(false);
+
         // Stop any existing recognition
         recognitionRef.current.stop();
-        
+
         // Start new recognition
         recognitionRef.current.start();
       } catch (error) {
         console.error('Error starting speech recognition:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        
+
         if (errorMessage.includes('already started')) {
           // Recognition is already running, just ignore
           return;
         }
-        
+
         toast({
           title: "Voice Recognition Error",
           description: `Failed to start voice recognition: ${errorMessage}. Please try text input instead.`,
@@ -257,7 +288,7 @@ export default function VoiceAIInterviewRound({
 
   const handleTextSubmit = async () => {
     if (!textInput.trim()) return;
-    
+
     await handleVoiceInput(textInput);
     setTextInput('');
     setShowTextInput(false);
@@ -266,48 +297,47 @@ export default function VoiceAIInterviewRound({
   const retrySpeechRecognition = () => {
     setRetryCount(prev => prev + 1);
     setSpeechRecognitionError(null);
-    
+
     // Reinitialize speech recognition
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       try {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = false;
+        recognitionRef.current.continuous = true;
         recognitionRef.current.interimResults = true;
         recognitionRef.current.lang = 'en-US';
 
         recognitionRef.current.onstart = () => {
           setIsListening(true);
           setCurrentTranscript('');
+          setFullTranscript('');
         };
 
         recognitionRef.current.onresult = (event) => {
-          let finalTranscript = '';
           let interimTranscript = '';
+          let finalTranscriptForTurn = '';
 
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
-              finalTranscript += transcript;
+              finalTranscriptForTurn += transcript + ' ';
             } else {
               interimTranscript += transcript;
             }
           }
 
           setCurrentTranscript(interimTranscript);
-          
-          if (finalTranscript) {
-            setCurrentTranscript('');
-            handleVoiceInput(finalTranscript);
+          if (finalTranscriptForTurn) {
+            setFullTranscript(prev => prev + finalTranscriptForTurn);
           }
         };
 
         recognitionRef.current.onerror = (event) => {
           console.error('Speech recognition error:', event.error);
           setIsListening(false);
-          
+
           let errorMessage = "Failed to recognize speech. Please try again.";
-          
+
           switch (event.error) {
             case 'no-speech':
               errorMessage = "No speech detected. Please speak clearly and try again.";
@@ -330,7 +360,7 @@ export default function VoiceAIInterviewRound({
             default:
               errorMessage = `Speech recognition error: ${event.error}. Please try again.`;
           }
-          
+
           setSpeechRecognitionError(errorMessage);
           toast({
             title: "Voice Recognition Error",
@@ -361,9 +391,23 @@ export default function VoiceAIInterviewRound({
     }
   };
 
-  const stopListening = () => {
+  const stopListening = async () => {
+    speechSynthesis.cancel();
+    setIsSpeaking(false);
+
     if (recognitionRef.current && isListening) {
       recognitionRef.current.stop();
+      setIsListening(false);
+
+      // Combine current interim with full transcript for final submission
+      const finalSubmission = (fullTranscript + ' ' + currentTranscript).trim();
+
+      if (finalSubmission) {
+        await handleVoiceInput(finalSubmission);
+      }
+
+      setFullTranscript('');
+      setCurrentTranscript('');
     }
   };
 
@@ -373,7 +417,7 @@ export default function VoiceAIInterviewRound({
 
     try {
       const welcomeMessage = `Welcome to your AI interview for the ${role} position at ${company}! I'm excited to learn more about you and your background. Today we'll have a conversation about your experience, skills, and how you might fit into our team. I'll be asking you questions in different areas - starting with some basic information about yourself, then we'll discuss your experiences, and finally some technical aspects of the role. Please feel free to ask me any questions as well. Let's begin!`;
-      
+
       setMessages([{
         role: 'assistant',
         content: welcomeMessage,
@@ -437,7 +481,8 @@ export default function VoiceAIInterviewRound({
           transcript,
           conversationHistory,
           resumeData,
-          projects
+          projects,
+          scores
         );
 
         const assistantMessage = {
@@ -465,40 +510,34 @@ export default function VoiceAIInterviewRound({
     }
   };
 
-  const handleEndInterview = () => {
-    const assistantQuestions = Math.max(0, messages.filter(m => m.role === 'assistant').length - 1); // exclude welcome
-    const userMessages = messages.filter(m => m.role === 'user');
-    const userAnswers = userMessages.length;
+  const handleEndInterview = async () => {
+    setIsLoading(true);
+    try {
+      const history = messages.map(m => ({ role: m.role, content: m.content }));
 
-    // No questions asked or no answers => score 0
-    if (assistantQuestions === 0 || userAnswers === 0) {
-      setScore(0);
+      const evaluation = await evaluateInterviewPerformance(role, company, history);
+
+      console.log("[VoiceAIInterview] Strict Evaluation Result:", evaluation);
+
+      setScore(evaluation.score);
       setInterviewEnded(true);
-      onRoundComplete(0);
-      return;
+      onRoundComplete(evaluation.score);
+
+      toast({
+        title: "Interview Completed",
+        description: `Communication: ${evaluation.communication_rating}% | Technical: ${evaluation.technical_rating}%`,
+      });
+    } catch (error) {
+      console.error("Error evaluating interview:", error);
+      // Fallback scoring if AI fails
+      const userAnswers = messages.filter(m => m.role === 'user').length;
+      const fallbackScore = Math.min(userAnswers * 10, 50); // Capped low fallback
+      setScore(fallbackScore);
+      setInterviewEnded(true);
+      onRoundComplete(fallbackScore);
+    } finally {
+      setIsLoading(false);
     }
-
-    // Completion component: proportion of questions answered
-    const completionRatio = Math.min(1, Math.max(0, userAnswers / assistantQuestions));
-
-    // Depth component: average words per answer (normalized to ~30 words target)
-    const wordsPerAnswer: number[] = userMessages.map(m => (m.content || '').trim().split(/\s+/).filter(Boolean).length);
-    const avgWords = wordsPerAnswer.length ? (wordsPerAnswer.reduce((a, b) => a + b, 0) / wordsPerAnswer.length) : 0;
-    const depthRatio = Math.min(1, Math.max(0, avgWords / 30));
-
-    // Combine with weights
-    const rawScore = 0.6 * completionRatio + 0.4 * depthRatio;
-    let calculated = Math.round(rawScore * 100);
-
-    // Cap score for very short sessions
-    if (userAnswers === 1) calculated = Math.min(calculated, 35);
-    else if (userAnswers === 2) calculated = Math.min(calculated, 55);
-
-    calculated = Math.min(100, Math.max(0, calculated));
-
-    setScore(calculated);
-    setInterviewEnded(true);
-    onRoundComplete(calculated);
   };
 
   if (interviewEnded) {
@@ -538,9 +577,15 @@ export default function VoiceAIInterviewRound({
         <div className="lg:col-span-2">
           <Card className="h-[75vh] md:h-[600px] flex flex-col">
             <CardHeader className="flex-shrink-0">
-              <CardTitle className="flex items-center">
-                <MessageSquare className="w-5 h-5 mr-2" />
-                AI Interview - {company} {role}
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <MessageSquare className="w-5 h-5 mr-2" />
+                  AI Interview - {company} {role}
+                </div>
+                <Badge variant="outline" className="ml-2 font-mono">
+                  <Clock className="w-3 h-3 mr-1" />
+                  {formatTime(timeLeft)}
+                </Badge>
               </CardTitle>
               <CardDescription>
                 {interviewStarted ? 'Answer the questions below' : 'Click Start Interview to begin'}
@@ -557,11 +602,10 @@ export default function VoiceAIInterviewRound({
                         className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                       >
                         <div
-                          className={`max-w-[80%] rounded-lg p-3 ${
-                            message.role === 'user'
-                              ? 'bg-blue-500 text-white'
-                              : 'bg-gray-100 text-gray-900'
-                          }`}
+                          className={`max-w-[80%] rounded-lg p-3 ${message.role === 'user'
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-100 text-gray-900'
+                            }`}
                         >
                           <div className="flex items-start space-x-2">
                             {message.role === 'assistant' && (
@@ -600,11 +644,15 @@ export default function VoiceAIInterviewRound({
               </div>
 
               {/* Live Transcript - Fixed at bottom of messages */}
-              {isListening && currentTranscript && (
+              {isListening && (fullTranscript || currentTranscript) && (
                 <div className="px-6 pb-2">
                   <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm font-medium">Listening:</p>
-                    <p className="text-sm text-muted-foreground italic">{currentTranscript}</p>
+                    <p className="text-sm font-medium">Captured Speech:</p>
+                    <p className="text-sm text-muted-foreground italic">
+                      {fullTranscript}
+                      <span className="text-blue-600 font-bold">{currentTranscript}</span>
+                    </p>
+                    <p className="text-[10px] text-blue-400 mt-1 italic">Pause for as long as you need. Click "Done" when you are finished.</p>
                   </div>
                 </div>
               )}
@@ -654,8 +702,8 @@ export default function VoiceAIInterviewRound({
                   >
                     {isListening ? (
                       <>
-                        <MicOff className="w-4 h-4 mr-2" />
-                        Stop Listening
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Done
                       </>
                     ) : (
                       <>
@@ -724,17 +772,17 @@ export default function VoiceAIInterviewRound({
                   </div>
                 )}
 
-              {/* End Interview Button - Always visible and large on mobile */}
-              <div className="pt-2 border-t">
-                <Button
-                  onClick={handleEndInterview}
-                  variant="default"
-                  className="w-full h-12 text-base"
-                >
-                  <CheckCircle className="w-5 h-5 mr-2" />
-                  End Interview
-                </Button>
-              </div>
+                {/* End Interview Button - Always visible and large on mobile */}
+                <div className="pt-2 border-t">
+                  <Button
+                    onClick={handleEndInterview}
+                    variant="default"
+                    className="w-full h-12 text-base"
+                  >
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    End Interview
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -757,7 +805,7 @@ export default function VoiceAIInterviewRound({
                   <p className="text-xs text-muted-foreground">Enunciate your words and speak at a normal pace</p>
                 </div>
               </div>
-              
+
               <div className="flex items-start space-x-2">
                 <CheckCircle className="w-4 h-4 text-green-500 mt-1" />
                 <div>
@@ -765,7 +813,7 @@ export default function VoiceAIInterviewRound({
                   <p className="text-xs text-muted-foreground">Provide concrete examples from your experience</p>
                 </div>
               </div>
-              
+
               <div className="flex items-start space-x-2">
                 <CheckCircle className="w-4 h-4 text-green-500 mt-1" />
                 <div>
@@ -773,7 +821,7 @@ export default function VoiceAIInterviewRound({
                   <p className="text-xs text-muted-foreground">Show interest by asking about the role and company</p>
                 </div>
               </div>
-              
+
               <div className="flex items-start space-x-2">
                 <CheckCircle className="w-4 h-4 text-green-500 mt-1" />
                 <div>

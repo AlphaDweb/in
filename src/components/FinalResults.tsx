@@ -3,20 +3,21 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Trophy, 
-  Star, 
-  Target, 
-  TrendingUp, 
-  Award, 
-  RefreshCw, 
-  FileText, 
-  Code, 
+import {
+  Trophy,
+  Star,
+  Target,
+  TrendingUp,
+  Award,
+  RefreshCw,
+  FileText,
+  Code,
   MessageSquare,
   CheckCircle
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { generateFinalFeedback } from '@/services/ai-service';
+import { dbService } from '@/services/db-service';
 
 interface FinalResultsProps {
   company: string;
@@ -27,21 +28,25 @@ interface FinalResultsProps {
 }
 
 interface Feedback {
-  overall_score: number;
-  performance_analysis: string;
-  strengths: string[];
-  areas_for_improvement: string[];
-  company_specific_feedback: string;
-  next_steps: string[];
+  overall_summary: string;
+  performance_breakdown: {
+    aptitude: string;
+    coding: string;
+    interview: string;
+  };
+  mistakes_identified: string[];
+  skill_gaps: string[];
+  improvement_suggestions: string[];
+  readiness_recommendation: "Ready" | "Partially Ready" | "Not Ready";
   confidence_rating: number;
 }
 
-const FinalResults: React.FC<FinalResultsProps> = ({ 
-  company, 
-  role, 
-  scores, 
-  sessionId, 
-  onRestart 
+const FinalResults: React.FC<FinalResultsProps> = ({
+  company,
+  role,
+  scores,
+  sessionId,
+  onRestart
 }) => {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,27 +59,35 @@ const FinalResults: React.FC<FinalResultsProps> = ({
   const generateFeedback = async () => {
     try {
       setLoading(true);
-      
-      const feedback = await generateFinalFeedback(company, role, scores);
-      setFeedback(feedback);
+
+      const feedbackData = await generateFinalFeedback(company, role, scores as { aptitude: number; coding: number; interview: number });
+      setFeedback(feedbackData);
+
+      // Save to DB
+      if (sessionId && !sessionId.startsWith('session_')) {
+        dbService.saveFinalFeedback(sessionId, feedbackData).catch(console.error);
+      }
     } catch (error) {
       console.error('Error generating feedback:', error);
       toast({
-        title: "Error",
-        description: "Failed to generate detailed feedback. Please check your Gemini API key.",
+        title: "Evaluation Error",
+        description: "Failed to generate critical report. Showing summary instead.",
         variant: "destructive",
       });
-      
-      // Fallback basic feedback
-      const avgScore = Math.round((scores.aptitude + scores.coding + scores.interview) / 3);
+
+      // Fallback
       setFeedback({
-        overall_score: avgScore,
-        performance_analysis: `You completed all three rounds of the ${company} ${role} interview simulation with an average score of ${avgScore}%.`,
-        strengths: ["Completed all rounds", "Good overall performance"],
-        areas_for_improvement: ["Continue practicing", "Review weak areas"],
-        company_specific_feedback: `Your performance shows readiness for ${company} interview process.`,
-        next_steps: ["Practice more problems", "Review interview techniques"],
-        confidence_rating: Math.min(10, Math.max(1, Math.round(avgScore / 10)))
+        overall_summary: "Interview rounds completed. Analysis failed due to API limits.",
+        performance_breakdown: {
+          aptitude: `Aptitude Score: ${scores.aptitude}%`,
+          coding: `Coding Score: ${scores.coding}%`,
+          interview: `Interview Score: ${scores.interview}%`
+        },
+        mistakes_identified: ["Specific analysis unavailable"],
+        skill_gaps: ["Specific gaps unavailable"],
+        improvement_suggestions: ["Review your answers manually", "Retake rounds if needed"],
+        readiness_recommendation: scores.coding > 70 ? "Partially Ready" : "Not Ready",
+        confidence_rating: 5
       });
     } finally {
       setLoading(false);
@@ -92,7 +105,7 @@ const FinalResults: React.FC<FinalResultsProps> = ({
     },
     {
       id: 'coding',
-      name: 'Coding Round', 
+      name: 'Coding Round',
       icon: Code,
       score: scores.coding || 0,
       maxScore: 100,
@@ -114,176 +127,190 @@ const FinalResults: React.FC<FinalResultsProps> = ({
     return 'text-red-600';
   };
 
-  const getScoreBadge = (score: number) => {
-    if (score >= 90) return { label: 'Excellent', variant: 'default' as const, color: 'bg-green-500' };
-    if (score >= 80) return { label: 'Very Good', variant: 'default' as const, color: 'bg-blue-500' };
-    if (score >= 70) return { label: 'Good', variant: 'secondary' as const, color: 'bg-yellow-500' };
-    if (score >= 60) return { label: 'Fair', variant: 'secondary' as const, color: 'bg-orange-500' };
-    return { label: 'Needs Improvement', variant: 'destructive' as const, color: 'bg-red-500' };
+  const getReadinessColor = (rec: string) => {
+    switch (rec) {
+      case 'Ready': return 'bg-green-500 hover:bg-green-600';
+      case 'Partially Ready': return 'bg-yellow-500 hover:bg-yellow-600';
+      default: return 'bg-red-500 hover:bg-red-600';
+    }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-          <h2 className="text-2xl font-bold mb-2">Analyzing Your Performance</h2>
-          <p className="text-muted-foreground">Our AI is generating personalized feedback...</p>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <div className="relative w-20 h-20 mx-auto">
+            <div className="absolute inset-0 border-4 border-primary/20 rounded-full animate-pulse"></div>
+            <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          </div>
+          <h2 className="text-2xl font-bold tracking-tight text-white">Lead Auditor Review</h2>
+          <p className="text-muted-foreground animate-pulse italic">Auditing your performance, code logic, and interview sentiment...</p>
         </div>
       </div>
     );
   }
 
-  const overallScore = feedback?.overall_score || Math.round((scores.aptitude + scores.coding + scores.interview) / 3);
-  const scoreBadge = getScoreBadge(overallScore);
+  const overallScore = Math.round(((scores.aptitude || 0) + (scores.coding || 0) + (scores.interview || 0)) / 3);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="text-center">
-        <Trophy className="w-16 h-16 text-primary mx-auto mb-4" />
-        <h1 className="text-4xl font-bold mb-2">Interview Complete!</h1>
-        <p className="text-xl text-muted-foreground mb-4">
-          {company} - {role} Position
+    <div className="max-w-5xl mx-auto space-y-10 pb-20 animate-in fade-in duration-1000">
+      {/* Header Section */}
+      <div className="text-center space-y-4">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-primary/10 rounded-full mb-4">
+          <Award className="w-10 h-10 text-primary" />
+        </div>
+        <h1 className="text-5xl font-extrabold tracking-tight text-white bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">Final Assessment Report</h1>
+        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+          Comprehensive evaluation for the <span className="text-primary font-bold">{role}</span> candidate at <span className="font-bold text-white">{company}</span>.
         </p>
-        <div className="flex items-center justify-center gap-4 mb-4">
-          <div className="text-6xl font-bold text-primary">{overallScore}%</div>
+
+        <div className="flex flex-col md:flex-row items-center justify-center gap-8 py-6">
           <div className="text-center">
-            <Badge className={scoreBadge.color + " text-white"}>{scoreBadge.label}</Badge>
-            <p className="text-sm text-muted-foreground mt-1">Overall Score</p>
+            <div className="text-7xl font-black text-primary tracking-tighter">{overallScore}%</div>
+            <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground mt-2">Overall Score</p>
+          </div>
+          <div className="h-16 w-px bg-border hidden md:block"></div>
+          <div className="text-center">
+            <Badge className={`${getReadinessColor(feedback?.readiness_recommendation || 'Not Ready')} text-white px-6 py-2 text-lg font-bold rounded-full uppercase tracking-tighter shadow-lg border-none`}>
+              {feedback?.readiness_recommendation || 'Evaluation Required'}
+            </Badge>
+            <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground mt-3">Readiness Rating</p>
           </div>
         </div>
       </div>
 
-      {/* Round Breakdown */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {roundDetails.map((round) => (
-          <Card key={round.id}>
-            <CardHeader className="text-center">
-              <round.icon className="w-8 h-8 mx-auto mb-2 text-primary" />
-              <CardTitle className="text-lg">{round.name}</CardTitle>
-              <CardDescription>{round.description}</CardDescription>
-            </CardHeader>
-            <CardContent className="text-center">
-              <div className={`text-3xl font-bold mb-2 ${getScoreColor(round.score)}`}>
-                {round.score}%
-              </div>
-              <Progress value={round.score} className="mb-2" />
-              <Badge variant={getScoreBadge(round.score).variant}>
-                {getScoreBadge(round.score).label}
-              </Badge>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {feedback && (
-        <>
-          {/* Performance Analysis */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <TrendingUp className="w-5 h-5 mr-2" />
-                Performance Analysis
+      {/* Critical Analysis Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Main Feedback Column */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* Executive Summary */}
+          <Card className="border-2 border-primary/20 overflow-hidden bg-white/5 backdrop-blur-sm">
+            <CardHeader className="bg-primary/5">
+              <CardTitle className="flex items-center text-primary uppercase tracking-widest text-xs font-bold">
+                <FileText className="w-4 h-4 mr-2" />
+                Executive Summary
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="leading-relaxed">{feedback.performance_analysis}</p>
+            <CardContent className="pt-6">
+              <p className="text-lg leading-relaxed font-medium text-gray-200 italic">
+                "{feedback?.overall_summary}"
+              </p>
             </CardContent>
           </Card>
 
-          {/* Strengths and Areas for Improvement */}
+          {/* Performance Breakdown Tiles */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { id: 'aptitude', name: 'Aptitude', icon: FileText, score: scores.aptitude, feedback: feedback?.performance_breakdown.aptitude },
+              { id: 'coding', name: 'Coding', icon: Code, score: scores.coding, feedback: feedback?.performance_breakdown.coding },
+              { id: 'interview', name: 'AI Interview', icon: MessageSquare, score: scores.interview, feedback: feedback?.performance_breakdown.interview }
+            ].map((round) => (
+              <Card key={round.id} className="relative group hover:border-primary/50 transition-all duration-300 bg-white/5 backdrop-blur-sm border-white/10">
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <round.icon className="w-6 h-6 text-primary" />
+                    <span className={`text-2xl font-bold ${getScoreColor(round.score || 0)}`}>{round.score}%</span>
+                  </div>
+                  <CardTitle className="text-sm font-bold uppercase tracking-tighter pt-2 text-gray-300">{round.name}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Progress value={round.score} className="h-1.5 mb-3 bg-white/10" />
+                  <p className="text-[10px] text-muted-foreground line-clamp-3 italic">"{round.feedback}"</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Detailed Mistakes & Gaps */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
+            <Card className="border-red-500/20 bg-red-500/5 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="flex items-center text-green-600">
-                  <CheckCircle className="w-5 h-5 mr-2" />
-                  Strengths
+                <CardTitle className="flex items-center text-red-500 text-base font-bold uppercase tracking-tight">
+                  <Target className="w-5 h-5 mr-2" />
+                  Mistakes Identified
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-2">
-                  {feedback.strengths.map((strength, index) => (
-                    <li key={index} className="flex items-start">
-                      <Star className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-                      <span>{strength}</span>
+                <ul className="space-y-3">
+                  {feedback?.mistakes_identified.map((mistake, idx) => (
+                    <li key={idx} className="flex gap-3 text-sm text-gray-300 bg-white/5 p-3 rounded-lg border border-red-500/10 shadow-sm">
+                      <div className="w-1.5 h-1.5 bg-red-500 rounded-full mt-1.5 flex-shrink-0" />
+                      {mistake}
                     </li>
                   ))}
                 </ul>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-amber-500/20 bg-amber-500/5 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="flex items-center text-amber-600">
-                  <Target className="w-5 h-5 mr-2" />
-                  Areas for Improvement
+                <CardTitle className="flex items-center text-amber-500 text-base font-bold uppercase tracking-tight">
+                  <Star className="w-5 h-5 mr-2" />
+                  Skill Gaps
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-2">
-                  {feedback.areas_for_improvement.map((area, index) => (
-                    <li key={index} className="flex items-start">
-                      <TrendingUp className="w-4 h-4 text-amber-500 mr-2 mt-0.5 flex-shrink-0" />
-                      <span>{area}</span>
-                    </li>
+                <div className="flex flex-wrap gap-2">
+                  {feedback?.skill_gaps.map((gap, idx) => (
+                    <Badge key={idx} variant="outline" className="bg-amber-500/10 border-amber-500/30 text-amber-400 px-3 py-1">
+                      {gap}
+                    </Badge>
                   ))}
-                </ul>
+                </div>
               </CardContent>
             </Card>
           </div>
+        </div>
 
-          {/* Company Specific Feedback */}
-          <Card>
+        {/* Sidebar Column */}
+        <div className="space-y-8">
+          {/* Interviewer's Confidence */}
+          <Card className="bg-gradient-to-br from-gray-900 to-black text-white border-white/10 overflow-hidden relative shadow-2xl">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <Star className="w-20 h-20 fill-current" />
+            </div>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <Award className="w-5 h-5 mr-2" />
-                {company} Interview Readiness
-              </CardTitle>
+              <CardTitle className="text-xs font-bold uppercase tracking-widest text-primary">Auditor Confidence</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span>Confidence Rating</span>
-                  <span className="font-bold">{feedback.confidence_rating}/10</span>
-                </div>
-                <Progress value={feedback.confidence_rating * 10} />
+            <CardContent className="space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="text-6xl font-black text-white tracking-tighter">{feedback?.confidence_rating}</div>
+                <div className="text-[10px] font-bold uppercase text-gray-400 leading-tight">Out of 10<br />Data Points Analyzed</div>
               </div>
-              <p className="leading-relaxed">{feedback.company_specific_feedback}</p>
+              <Progress value={(feedback?.confidence_rating || 0) * 10} className="h-2 bg-white/10" />
+              <p className="text-[10px] text-gray-500 italic">This rating represents the auditor's certainty in this assessment based on your answers and code precision.</p>
             </CardContent>
           </Card>
 
-          {/* Next Steps */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Recommended Next Steps</CardTitle>
+          {/* Action Roadmap */}
+          <Card className="shadow-2xl bg-white/5 backdrop-blur-sm border-white/10">
+            <CardHeader className="border-b border-white/10 pb-4">
+              <CardTitle className="text-sm uppercase tracking-widest font-bold text-white">Improvement Roadmap</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ul className="space-y-3">
-                {feedback.next_steps.map((step, index) => (
-                  <li key={index} className="flex items-start">
-                    <div className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-sm mr-3 mt-0.5 flex-shrink-0">
+            <CardContent className="pt-6">
+              <div className="space-y-6">
+                {feedback?.improvement_suggestions.map((step, index) => (
+                  <div key={index} className="flex gap-4 group">
+                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs group-hover:bg-primary group-hover:text-white transition-all">
                       {index + 1}
                     </div>
-                    <span>{step}</span>
-                  </li>
+                    <p className="text-sm text-gray-400 font-medium leading-tight pt-1">{step}</p>
+                  </div>
                 ))}
-              </ul>
+              </div>
+              <div className="mt-8 pt-6 border-t border-white/10 space-y-4">
+                <Button onClick={onRestart} className="w-full h-11 font-bold shadow-lg bg-primary hover:bg-primary/90" variant="default">
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Restart Assessment
+                </Button>
+                <Button onClick={() => window.print()} variant="outline" className="w-full h-11 border-white/10 bg-transparent hover:bg-white/5 text-gray-400">
+                  <FileText className="mr-2 h-4 w-4" />
+                  Download PDF Report
+                </Button>
+              </div>
             </CardContent>
           </Card>
-        </>
-      )}
-
-      {/* Action Buttons */}
-      <div className="text-center space-x-4">
-        <Button onClick={onRestart} size="lg" variant="outline">
-          <RefreshCw className="mr-2 h-5 w-5" />
-          Start New Interview
-        </Button>
-        <Button onClick={() => window.print()} size="lg">
-          <FileText className="mr-2 h-5 w-5" />
-          Save Results
-        </Button>
+        </div>
       </div>
     </div>
   );
