@@ -11,7 +11,7 @@ interface CompanySelectionProps {
 }
 
 const companies = [
-  "Google", "Microsoft", "Amazon", "Apple", "Meta", "Netflix", "Tesla", 
+  "Google", "Microsoft", "Amazon", "Apple", "Meta", "Netflix", "Tesla",
   "Uber", "Airbnb", "Spotify", "Adobe", "Salesforce", "IBM", "Oracle"
 ];
 
@@ -21,11 +21,11 @@ const roles = [
   "System Design Engineer", "Mobile Developer", "QA Engineer", "Security Engineer"
 ];
 
-const CompanySelection = ({ 
-  selectedCompany, 
-  setSelectedCompany, 
-  selectedRole, 
-  setSelectedRole 
+const CompanySelection = ({
+  selectedCompany,
+  setSelectedCompany,
+  selectedRole,
+  setSelectedRole
 }: CompanySelectionProps) => {
   return (
     <Card className="card-shadow">
@@ -82,9 +82,9 @@ const CompanySelection = ({
               <CheckCircle className="h-4 w-4 text-success" />
               <span className="text-sm font-medium text-success">Selection Complete</span>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Preparing interview questions for <Badge variant="secondary">{selectedRole}</Badge> at <Badge variant="secondary">{selectedCompany}</Badge>
-            </p>
+            <div className="text-sm text-muted-foreground">
+              Preparing interview questions for <Badge variant="secondary" className="mx-1">{selectedRole}</Badge> at <Badge variant="secondary" className="mx-1">{selectedCompany}</Badge>
+            </div>
           </div>
         )}
       </CardContent>

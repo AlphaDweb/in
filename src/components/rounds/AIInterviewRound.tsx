@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Clock, MessageSquare, Send, Bot, User, CheckCircle, ArrowRight } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { generateAIInterviewResponse } from '@/services/openai';
+import { generateAIInterviewResponse } from '@/services/ai-service';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -52,11 +52,11 @@ const AIInterviewRound: React.FC<AIInterviewRoundProps> = ({ company, role, sess
   const startInterview = async () => {
     setInterviewStarted(true);
     setIsLoading(true);
-    
+
     try {
       const response = await generateAIInterviewResponse(
-        company, 
-        role, 
+        company,
+        role,
         `Hello! I'm here for the ${role} position interview at ${company}. I'm ready to begin.`,
         []
       );
@@ -71,7 +71,7 @@ const AIInterviewRound: React.FC<AIInterviewRoundProps> = ({ company, role, sess
       console.error('Error starting interview:', error);
       toast({
         title: "Error",
-        description: "Failed to start interview. Please check your OpenAI API key.",
+        description: "Failed to start interview. Please check your AI API key.",
         variant: "destructive",
       });
     } finally {
@@ -100,8 +100,8 @@ const AIInterviewRound: React.FC<AIInterviewRoundProps> = ({ company, role, sess
       }));
 
       const response = await generateAIInterviewResponse(
-        company, 
-        role, 
+        company,
+        role,
         messageToSend,
         conversationHistory
       );
@@ -116,7 +116,7 @@ const AIInterviewRound: React.FC<AIInterviewRoundProps> = ({ company, role, sess
       console.error('Error sending message:', error);
       toast({
         title: "Error",
-        description: "Failed to send message. Please check your OpenAI API key.",
+        description: "Failed to send message. Please check your AI API key.",
         variant: "destructive",
       });
     } finally {
@@ -136,12 +136,12 @@ const AIInterviewRound: React.FC<AIInterviewRoundProps> = ({ company, role, sess
     const userMessages = messages.filter(msg => msg.role === 'user');
     const totalWords = userMessages.reduce((total, msg) => total + msg.content.split(' ').length, 0);
     const avgWordsPerMessage = totalWords / Math.max(userMessages.length, 1);
-    
+
     // Score based on engagement (more messages and longer responses = better score)
-    let calculatedScore = Math.min(100, Math.max(50, 
+    let calculatedScore = Math.min(100, Math.max(50,
       (userMessages.length * 10) + (avgWordsPerMessage * 2)
     ));
-    
+
     setScore(Math.round(calculatedScore));
     setInterviewEnded(true);
     onRoundComplete(Math.round(calculatedScore));
@@ -203,7 +203,7 @@ const AIInterviewRound: React.FC<AIInterviewRoundProps> = ({ company, role, sess
                   <li>Your responses will be evaluated for clarity and relevance</li>
                 </ul>
               </div>
-              
+
               <div className="text-center pt-6">
                 <Button onClick={startInterview} size="lg" className="text-lg px-8 py-3">
                   Start Interview
@@ -230,8 +230,8 @@ const AIInterviewRound: React.FC<AIInterviewRoundProps> = ({ company, role, sess
               <Clock className="w-4 h-4 mr-2" />
               {formatTime(timeLeft)}
             </Badge>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={handleEndInterview}
               disabled={messages.filter(m => m.role === 'user').length < 3}
             >
@@ -246,35 +246,31 @@ const AIInterviewRound: React.FC<AIInterviewRoundProps> = ({ company, role, sess
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Live Interview Chat</CardTitle>
           </CardHeader>
-          
+
           <CardContent className="flex-1 flex flex-col">
             <ScrollArea className="flex-1 pr-4 mb-4">
               <div className="space-y-4">
                 {messages.map((message, index) => (
                   <div
                     key={index}
-                    className={`flex items-start gap-3 ${
-                      message.role === 'user' ? 'flex-row-reverse' : ''
-                    }`}
+                    className={`flex items-start gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''
+                      }`}
                   >
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      message.role === 'user' ? 'bg-primary' : 'bg-muted'
-                    }`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${message.role === 'user' ? 'bg-primary' : 'bg-muted'
+                      }`}>
                       {message.role === 'user' ? (
                         <User className="w-4 h-4 text-white" />
                       ) : (
                         <Bot className="w-4 h-4" />
                       )}
                     </div>
-                    
-                    <div className={`flex-1 max-w-[80%] ${
-                      message.role === 'user' ? 'text-right' : ''
-                    }`}>
-                      <div className={`p-3 rounded-lg text-sm ${
-                        message.role === 'user' 
-                          ? 'bg-primary text-white' 
-                          : 'bg-muted'
+
+                    <div className={`flex-1 max-w-[80%] ${message.role === 'user' ? 'text-right' : ''
                       }`}>
+                      <div className={`p-3 rounded-lg text-sm ${message.role === 'user'
+                          ? 'bg-primary text-white'
+                          : 'bg-muted'
+                        }`}>
                         {message.content}
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">
@@ -283,7 +279,7 @@ const AIInterviewRound: React.FC<AIInterviewRoundProps> = ({ company, role, sess
                     </div>
                   </div>
                 ))}
-                
+
                 {isLoading && (
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
@@ -300,11 +296,11 @@ const AIInterviewRound: React.FC<AIInterviewRoundProps> = ({ company, role, sess
                     </div>
                   </div>
                 )}
-                
+
                 <div ref={messagesEndRef} />
               </div>
             </ScrollArea>
-            
+
             <div className="flex gap-2">
               <Input
                 value={currentMessage}
@@ -314,8 +310,8 @@ const AIInterviewRound: React.FC<AIInterviewRoundProps> = ({ company, role, sess
                 disabled={isLoading}
                 className="flex-1"
               />
-              <Button 
-                onClick={sendMessage} 
+              <Button
+                onClick={sendMessage}
                 disabled={!currentMessage.trim() || isLoading}
                 size="icon"
               >

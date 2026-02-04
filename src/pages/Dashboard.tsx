@@ -3,14 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Building2, 
-  Upload, 
-  FileText, 
-  Code, 
-  MessageSquare, 
-  Play, 
-  CheckCircle, 
+import {
+  Building2,
+  Upload,
+  FileText,
+  Code,
+  MessageSquare,
+  Play,
+  CheckCircle,
   Clock,
   Star,
   Award
@@ -32,7 +32,7 @@ const Dashboard = () => {
   const [projects, setProjects] = useState<string[]>([]);
   const [currentRound, setCurrentRound] = useState("");
   const [sessionId] = useState(() => `session_${Date.now()}_${Math.random()}`);
-  const [roundScores, setRoundScores] = useState<{[key: string]: number}>({});
+  const [roundScores, setRoundScores] = useState<{ [key: string]: number }>({});
   const { toast } = useToast();
 
   const [completedRounds, setCompletedRounds] = useState<string[]>([]);
@@ -47,10 +47,10 @@ const Dashboard = () => {
   const handleRoundComplete = (roundId: string, score: number) => {
     setRoundScores(prev => ({ ...prev, [roundId]: score }));
     setCompletedRounds(prev => [...prev, roundId]);
-    
+
     // Check if all rounds are completed
     const newCompletedRounds = [...completedRounds, roundId];
-    
+
     if (newCompletedRounds.length === 3) {
       // All rounds completed, show final results
       setCurrentStep("finalResults");
@@ -58,7 +58,7 @@ const Dashboard = () => {
       // Return to rounds overview
       setCurrentStep("rounds");
     }
-    
+
     toast({
       title: "Round completed!",
       description: `You scored ${score}% in the ${roundId} round.`,
@@ -78,12 +78,12 @@ const Dashboard = () => {
     },
     {
       id: "coding",
-      title: "Coding Round", 
+      title: "Coding Round",
       description: "Programming challenges tailored to your role",
       icon: Code,
       duration: "90 minutes",
       questions: 3,
-      status: completedRounds.includes("aptitude") && !completedRounds.includes("coding") ? "available" : completedRounds.includes("coding") ? "completed" : "locked", 
+      status: completedRounds.includes("aptitude") && !completedRounds.includes("coding") ? "available" : completedRounds.includes("coding") ? "completed" : "locked",
       score: roundScores.coding || null
     },
     {
@@ -106,13 +106,13 @@ const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <CompanySelection 
+        <CompanySelection
           selectedCompany={selectedCompany}
           setSelectedCompany={setSelectedCompany}
           selectedRole={selectedRole}
           setSelectedRole={setSelectedRole}
         />
-        <ResumeUpload 
+        <ResumeUpload
           resumeUploaded={resumeUploaded}
           setResumeUploaded={setResumeUploaded}
           setResumeData={setResumeData}
@@ -130,7 +130,7 @@ const Dashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
+              <Button
                 onClick={() => setCurrentStep("rounds")}
                 className="w-full"
                 size="lg"
@@ -149,9 +149,9 @@ const Dashboard = () => {
     <div className="space-y-8">
       <div className="text-center mb-8">
         <h1 className="text-4xl font-bold mb-4">Interview Rounds</h1>
-        <p className="text-xl text-muted-foreground">
-          Preparing for <Badge variant="secondary" className="text-base">{selectedCompany}</Badge> - {selectedRole}
-        </p>
+        <div className="text-xl text-muted-foreground">
+          Preparing for <Badge variant="secondary" className="text-base mx-1">{selectedCompany}</Badge> - {selectedRole}
+        </div>
         <div className="mt-4">
           <Progress value={(completedRounds.length / 3) * 100} className="w-full max-w-md mx-auto" />
           <p className="text-sm text-muted-foreground mt-2">{completedRounds.length}/3 rounds completed</p>
@@ -166,10 +166,10 @@ const Dashboard = () => {
                 <div className="w-12 h-12 bg-gradient-to-r from-primary to-accent rounded-xl flex items-center justify-center">
                   <round.icon className="h-6 w-6 text-white" />
                 </div>
-                <Badge variant={round.status === "locked" ? "secondary" : 
-                              round.status === "completed" ? "default" : "default"}>
-                  {round.status === "locked" ? "Locked" : 
-                   round.status === "completed" ? "Completed" : "Available"}
+                <Badge variant={round.status === "locked" ? "secondary" :
+                  round.status === "completed" ? "default" : "default"}>
+                  {round.status === "locked" ? "Locked" :
+                    round.status === "completed" ? "Completed" : "Available"}
                 </Badge>
               </div>
               <CardTitle className="text-xl">{round.title}</CardTitle>
@@ -184,7 +184,7 @@ const Dashboard = () => {
                 <span className="text-muted-foreground">Questions:</span>
                 <span className="font-medium">{round.questions}</span>
               </div>
-              
+
               {round.score && (
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Score:</span>
@@ -195,11 +195,11 @@ const Dashboard = () => {
                 </div>
               )}
 
-              <Button 
-                className="w-full" 
+              <Button
+                className="w-full"
                 disabled={round.status === "locked"}
-                variant={round.status === "locked" ? "secondary" : 
-                        round.status === "completed" ? "outline" : "default"}
+                variant={round.status === "locked" ? "secondary" :
+                  round.status === "completed" ? "outline" : "default"}
                 onClick={() => round.status !== "locked" && handleStartRound(round.id)}
               >
                 {round.status === "locked" ? (
@@ -236,7 +236,7 @@ const Dashboard = () => {
     switch (currentRound) {
       case "aptitude":
         return (
-          <AptitudeRound 
+          <AptitudeRound
             company={selectedCompany}
             role={selectedRole}
             sessionId={sessionId}
@@ -245,7 +245,7 @@ const Dashboard = () => {
         );
       case "coding":
         return (
-          <CodingRound 
+          <CodingRound
             company={selectedCompany}
             role={selectedRole}
             sessionId={sessionId}
@@ -269,7 +269,7 @@ const Dashboard = () => {
   };
 
   const renderFinalResults = () => (
-    <FinalResults 
+    <FinalResults
       company={selectedCompany}
       role={selectedRole}
       scores={roundScores}
@@ -287,10 +287,10 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-gradient-subtle">
       <div className="container mx-auto px-4 py-12">
-        {currentStep === "setup" ? renderSetupPhase() : 
-         currentStep === "rounds" ? renderRoundsPhase() : 
-         currentStep === "finalResults" ? renderFinalResults() :
-         renderActiveRound()}
+        {currentStep === "setup" ? renderSetupPhase() :
+          currentStep === "rounds" ? renderRoundsPhase() :
+            currentStep === "finalResults" ? renderFinalResults() :
+              renderActiveRound()}
       </div>
     </div>
   );
