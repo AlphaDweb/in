@@ -20,9 +20,11 @@ interface ResumeAnalysisResult {
  * Core function to call the Gemini API via our backend proxy.
  * Fallback to direct call for local development (npm run dev).
  */
-async function callGemini(messages: Message[], maxTokens: number = 1000, temperature: number = 0.7): Promise<string> {
+async function callGemini(messages: Message[], maxTokens: number = 1000, temperature: number = 0.7, retryCount: number = 0): Promise<string> {
+  const isLocal = window.location.hostname.includes('localhost');
+
   // 1. Try the serverless API proxy (Skip for local dev to avoid console clutter)
-  if (!window.location.hostname.includes('localhost')) {
+  if (!isLocal) {
     try {
       const response = await fetch('/api/gemini', {
         method: 'POST',
@@ -35,25 +37,27 @@ async function callGemini(messages: Message[], maxTokens: number = 1000, tempera
         return data.text;
       }
 
+      // 503 Retry Logic
+      if (response.status === 503 && retryCount < 3) {
+        await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));
+        return callGemini(messages, maxTokens, temperature, retryCount + 1);
+      }
+
       if (response.status !== 404) {
         const error = await response.json();
-        throw new Error(error.error || 'Gemini Proxy Error');
+        throw new Error(error.error || `Gemini Proxy Error (${response.status})`);
       }
     } catch (err: any) {
-      if (err instanceof Error && !err.message.includes('404') && !err.message.includes('Unexpected token')) {
-        throw err;
-      }
+      if (err instanceof Error && !err.message.includes('404')) throw err;
     }
   }
 
-
   // 2. Fallback for Local Development (npm run dev)
-  // Vite dev server doesn't host /api routes, so we go direct.
   const localApiKey = import.meta.env.VITE_GEMINI_API_KEY1 || import.meta.env.VITE_GEMINI_API_KEY;
   let localApiUrl = import.meta.env.VITE_GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash';
 
   if (!localApiKey) {
-    throw new Error('Gemini Proxy not found (404) and no local key configured.');
+    throw new Error('Gemini API key not configured. Please check your .env file.');
   }
 
   // Ensure URL is correct
@@ -69,22 +73,36 @@ async function callGemini(messages: Message[], maxTokens: number = 1000, tempera
     parts: [{ text: msg.content }]
   }));
 
-  const response = await fetch(`${localApiUrl}?key=${localApiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: geminiMessages,
-      generationConfig: { maxOutputTokens: maxTokens, temperature: temperature }
-    }),
-  });
+  try {
+    const response = await fetch(`${localApiUrl}?key=${localApiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: geminiMessages,
+        generationConfig: { maxOutputTokens: maxTokens, temperature: temperature }
+      }),
+    });
 
-  if (!response.ok) {
+    if (response.ok) {
+      const data = await response.json();
+      return data.candidates[0].content.parts[0].text;
+    }
+
+    // 503 Retry Logic
+    if (response.status === 503 && retryCount < 3) {
+      await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));
+      return callGemini(messages, maxTokens, temperature, retryCount + 1);
+    }
+
     const error = await response.json();
-    throw new Error(error.error?.message || 'Gemini Direct API Error');
+    throw new Error(error.error?.message || `Gemini Direct API Error (${response.status})`);
+  } catch (err: any) {
+    if (err.message?.includes('503') && retryCount < 3) {
+      await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));
+      return callGemini(messages, maxTokens, temperature, retryCount + 1);
+    }
+    throw err;
   }
-
-  const data = await response.json();
-  return data.candidates[0].content.parts[0].text;
 }
 
 /**
