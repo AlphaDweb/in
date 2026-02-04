@@ -2,7 +2,7 @@
 
 // Configuration
 const OPENAI_API_KEY = undefined; // OpenAI disabled
-const GEMINI_API_URL = import.meta.env.VITE_GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const GEMINI_API_URL = import.meta.env.VITE_GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview';
 
 // Collect Gemini API keys from env
 function collectGeminiKeys(): string[] {
