@@ -85,7 +85,7 @@ const CodingRound: React.FC<CodingRoundProps> = ({ company, role, sessionId, onR
   const testCode = async () => {
     const currentSolution = solutions[currentProblemIndex] || '';
     const currentProblem = problems[currentProblemIndex];
-    
+
     if (!currentSolution.trim()) {
       toast({
         title: "No Code",
@@ -105,7 +105,7 @@ const CodingRound: React.FC<CodingRoundProps> = ({ company, role, sessionId, onR
     }
 
     setIsEvaluating(true);
-    
+
     try {
       const evaluation = await evaluateCodeSolution(
         currentProblem.title,
@@ -257,7 +257,7 @@ const CodingRound: React.FC<CodingRoundProps> = ({ company, role, sessionId, onR
                 </CardTitle>
                 <div className="flex gap-2">
                   <Badge variant="secondary">{currentProblem.difficulty}</Badge>
-                  {currentProblem.tags.map(tag => (
+                  {currentProblem.tags?.map(tag => (
                     <Badge key={tag} variant="outline">{tag}</Badge>
                   ))}
                 </div>
@@ -268,7 +268,7 @@ const CodingRound: React.FC<CodingRoundProps> = ({ company, role, sessionId, onR
                 <h4 className="font-semibold mb-2">Problem Description:</h4>
                 <p className="text-sm leading-relaxed whitespace-pre-line">{currentProblem.description}</p>
               </div>
-              
+
               <div>
                 <h4 className="font-semibold mb-2">Example:</h4>
                 <div className="bg-muted p-3 rounded-md text-sm">
@@ -306,7 +306,7 @@ const CodingRound: React.FC<CodingRoundProps> = ({ company, role, sessionId, onR
                 ))}
               </SelectContent>
             </Select>
-            
+
             <Button onClick={testCode} variant="outline" disabled={isEvaluating}>
               {isEvaluating ? (
                 <>
@@ -320,7 +320,7 @@ const CodingRound: React.FC<CodingRoundProps> = ({ company, role, sessionId, onR
                 </>
               )}
             </Button>
-            
+
             {testResults[currentProblemIndex] && (
               <Badge variant="default" className="bg-green-500">
                 <CheckCircle className="w-4 h-4 mr-1" />
@@ -357,7 +357,7 @@ const CodingRound: React.FC<CodingRoundProps> = ({ company, role, sessionId, onR
                   <h4 className="font-semibold mb-2">Feedback:</h4>
                   <p className="text-sm text-muted-foreground">{evaluationResults[currentProblemIndex].feedback}</p>
                 </div>
-                
+
                 {evaluationResults[currentProblemIndex].test_results && (
                   <div>
                     <h4 className="font-semibold mb-2">Test Case Results:</h4>
@@ -404,7 +404,7 @@ const CodingRound: React.FC<CodingRoundProps> = ({ company, role, sessionId, onR
             >
               Previous Problem
             </Button>
-            
+
             {currentProblemIndex === problems.length - 1 ? (
               <Button onClick={handleSubmit}>
                 Submit Solutions
