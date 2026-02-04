@@ -144,28 +144,42 @@ export async function generateAptitudeQuestions(company: string, role: string) {
   const messages: Message[] = [
     {
       role: 'system',
-      content: `You are an expert recruiter. Generate exactly 10 multiple choice questions for a ${role} position at ${company}. Focus on logical reasoning, quantitative aptitude, and verbal ability.`
+      content: `You are an expert recruiter. Generate exactly 5 multiple choice questions for a ${role} position at ${company}. Focus on logical reasoning, quantitative aptitude, and verbal ability.`
     },
     {
       role: 'user',
-      content: `Generate 10 aptitude questions in JSON format. Return ONLY the JSON object.
+      content: `Generate 5 aptitude questions in JSON format. Return ONLY the JSON object.
       
       Output format:
       {
         "questions": [
           {
-            "question": "text",
+            "question": "short question text",
             "options": ["A) opt1", "B) opt2", "C) opt3", "D) opt4"],
             "correct_answer": "A",
-            "explanation": "summary"
+            "explanation": "short explanation"
           }
         ]
       }`
     }
   ];
 
-  const response = await callAI(messages, 4000, 0.7);
-  return JSON.parse(cleanJsonResponse(response));
+  // Lower temperature to 0.1 for more stable JSON formatting
+  const response = await callAI(messages, 4000, 0.1);
+  const cleaned = cleanJsonResponse(response);
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    console.error("JSON Parse Error in Aptitude Questions. Content:", cleaned);
+    // If it failed because of truncation, try a simple regex fix for common tail issues
+    const fixed = cleaned.endsWith('}]}') ? cleaned : cleaned + ']}]}';
+    try {
+      return JSON.parse(fixed);
+    } catch (innerError) {
+      throw new Error("AI returned invalid JSON. Please try again.");
+    }
+  }
 }
 
 /**
