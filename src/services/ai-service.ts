@@ -398,7 +398,9 @@ export async function evaluateInterviewPerformance(
   company: string,
   conversationHistory: Array<{ role: string, content: string }>
 ) {
-  const historyText = conversationHistory
+  // Limit history for evaluation to prevent token overflow
+  const trimmedHistory = conversationHistory.slice(-15);
+  const historyText = trimmedHistory
     .map(m => `${m.role.toUpperCase()}: ${m.content}`)
     .join('\n\n');
 
@@ -431,8 +433,20 @@ export async function evaluateInterviewPerformance(
     }
   ];
 
-  const response = await callAI(messages, 2000, 0.3);
-  return JSON.parse(cleanJsonResponse(response));
+  try {
+    const response = await callAI(messages, 1500, 0.1);
+    const cleaned = cleanJsonResponse(response);
+    try {
+      return JSON.parse(cleaned);
+    } catch (parseError) {
+      console.error("Interview evaluation JSON repair needed", cleaned);
+      const fixed = cleaned.trim().replace(/}[^}]*$/, '}');
+      return JSON.parse(fixed);
+    }
+  } catch (error) {
+    console.error("Final interview evaluation failed:", error);
+    throw error;
+  }
 }
 
 /**
@@ -480,8 +494,19 @@ export async function generateFinalFeedback(
     }
   ];
 
-  const response = await callAI(messages, 3000, 0.5);
-  return JSON.parse(cleanJsonResponse(response));
+  try {
+    const response = await callAI(messages, 2000, 0.1); // Lower temperature for report
+    const cleaned = cleanJsonResponse(response);
+    try {
+      return JSON.parse(cleaned);
+    } catch (parseError) {
+      const fixed = cleaned.trim().replace(/}[^}]*$/, '}');
+      return JSON.parse(fixed);
+    }
+  } catch (error) {
+    console.error("Final report generation failed:", error);
+    throw error;
+  }
 }
 
 /**

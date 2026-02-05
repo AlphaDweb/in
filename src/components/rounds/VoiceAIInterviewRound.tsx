@@ -62,6 +62,7 @@ export default function VoiceAIInterviewRound({
   const [microphonePermission, setMicrophonePermission] = useState<'granted' | 'denied' | 'prompt' | 'unknown'>('unknown');
   const [speechRecognitionSupported, setSpeechRecognitionSupported] = useState(false);
   const [speechRecognitionError, setSpeechRecognitionError] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [timeLeft, setTimeLeft] = useState(10 * 60); // 10 minutes in seconds
 
@@ -128,6 +129,7 @@ export default function VoiceAIInterviewRound({
 
       recognitionRef.current.onstart = () => {
         setIsListening(true);
+        isListeningRef.current = true;
         setCurrentTranscript('');
         setFullTranscript('');
       };
@@ -190,6 +192,7 @@ export default function VoiceAIInterviewRound({
 
       recognitionRef.current.onend = () => {
         setIsListening(false);
+        isListeningRef.current = false;
       };
 
     } catch (error) {
@@ -219,21 +222,37 @@ export default function VoiceAIInterviewRound({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Ref-based state for immediate access in async callbacks
+  const isListeningRef = useRef(false);
+  const isSpeakingRef = useRef(false);
+
   const speakText = (text: string) => {
-    if (!isVoiceEnabled || isListening) return;
+    if (!isVoiceEnabled) return;
 
-    speechSynthesis.cancel();
+    // Cancel any current speech
+    window.speechSynthesis.cancel();
+
+    // Create new utterance
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.9;
+    utterance.rate = 0.95; // Slightly faster for natural feel
     utterance.pitch = 1;
-    utterance.volume = 0.8;
+    utterance.volume = 1.0;
 
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      isSpeakingRef.current = true;
+    };
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      isSpeakingRef.current = false;
+    };
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      isSpeakingRef.current = false;
+    };
 
     synthesisRef.current = utterance;
-    speechSynthesis.speak(utterance);
+    window.speechSynthesis.speak(utterance);
   };
 
   const startListening = () => {
@@ -256,23 +275,20 @@ export default function VoiceAIInterviewRound({
       return;
     }
 
-    if (recognitionRef.current && !isListening) {
+    if (recognitionRef.current && !isListeningRef.current) {
       try {
         // Stop any AI speech immediately when user starts speaking
-        speechSynthesis.cancel();
+        window.speechSynthesis.cancel();
         setIsSpeaking(false);
+        isSpeakingRef.current = false;
 
-        // Stop any existing recognition
-        recognitionRef.current.stop();
-
-        // Start new recognition
+        // Start recognition
         recognitionRef.current.start();
       } catch (error) {
         console.error('Error starting speech recognition:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
         if (errorMessage.includes('already started')) {
-          // Recognition is already running, just ignore
           return;
         }
 
@@ -392,18 +408,31 @@ export default function VoiceAIInterviewRound({
   };
 
   const stopListening = async () => {
-    speechSynthesis.cancel();
-    setIsSpeaking(false);
+    window.speechSynthesis.cancel();
 
-    if (recognitionRef.current && isListening) {
+    // "Unlock" voice context for future AI response
+    // Some browsers require a fresh user gesture to speak
+    const silentUtterance = new SpeechSynthesisUtterance("");
+    window.speechSynthesis.speak(silentUtterance);
+
+    setIsSpeaking(false);
+    isSpeakingRef.current = false;
+
+    if (recognitionRef.current && isListeningRef.current) {
       recognitionRef.current.stop();
       setIsListening(false);
+      isListeningRef.current = false;
 
       // Combine current interim with full transcript for final submission
       const finalSubmission = (fullTranscript + ' ' + currentTranscript).trim();
 
       if (finalSubmission) {
         await handleVoiceInput(finalSubmission);
+      } else {
+        toast({
+          title: "No Input Detected",
+          description: "Please speak clearly or use text input.",
+        });
       }
 
       setFullTranscript('');
@@ -511,34 +540,87 @@ export default function VoiceAIInterviewRound({
   };
 
   const handleEndInterview = async () => {
+    if (isLoading || isAnalyzing) return;
+
+    setIsAnalyzing(true);
     setIsLoading(true);
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
     try {
+      console.log("[VoiceAIInterview] Ending interview and starting analysis...");
+
       const history = messages.map(m => ({ role: m.role, content: m.content }));
+
+      // If history is too short, generate minimum feedback
+      if (history.length < 2) {
+        const minScore = 30; // Minimum baseline
+        setScore(minScore);
+        setInterviewEnded(true);
+        onRoundComplete(minScore);
+        return;
+      }
 
       const evaluation = await evaluateInterviewPerformance(role, company, history);
 
-      console.log("[VoiceAIInterview] Strict Evaluation Result:", evaluation);
+      console.log("[VoiceAIInterview] Evaluation Success:", evaluation);
 
-      setScore(evaluation.score);
+      setScore(evaluation.score || 50);
       setInterviewEnded(true);
-      onRoundComplete(evaluation.score);
+      onRoundComplete(evaluation.score || 50);
 
       toast({
-        title: "Interview Completed",
-        description: `Communication: ${evaluation.communication_rating}% | Technical: ${evaluation.technical_rating}%`,
+        title: "Analysis Complete",
+        description: `Score: ${evaluation.score}% | Your report is ready.`,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error evaluating interview:", error);
-      // Fallback scoring if AI fails
-      const userAnswers = messages.filter(m => m.role === 'user').length;
-      const fallbackScore = Math.min(userAnswers * 10, 50); // Capped low fallback
+
+      // Dynamic fallback based on user input quality
+      const userMessages = messages.filter(m => m.role === 'user');
+      const totalWords = userMessages.reduce((sum, m) => sum + m.content.split(' ').length, 0);
+      const fallbackScore = Math.min(Math.max(40, Math.floor(totalWords / 5)), 75);
+
       setScore(fallbackScore);
       setInterviewEnded(true);
       onRoundComplete(fallbackScore);
+
+      toast({
+        title: "Evaluation Timeout",
+        description: "Standard scores generated based on interaction volume.",
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
+      setIsAnalyzing(false);
     }
   };
+
+  if (isAnalyzing) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <Card className="text-center p-12 space-y-6 bg-white/5 backdrop-blur-md border-primary/20">
+          <div className="relative w-24 h-24 mx-auto">
+            <div className="absolute inset-0 border-4 border-primary/20 rounded-full animate-pulse"></div>
+            <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <Bot className="w-10 h-10 text-primary absolute inset-0 m-auto animate-bounce" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-3xl font-bold tracking-tight">Analyzing Performance</h2>
+            <p className="text-muted-foreground italic">
+              Evaluating your communication skills, technical depth, and overall sentiment...
+            </p>
+          </div>
+          <div className="flex justify-center gap-2">
+            <Badge variant="outline" className="animate-pulse">Reasoning</Badge>
+            <Badge variant="outline" className="animate-pulse delay-75">Skills Check</Badge>
+            <Badge variant="outline" className="animate-pulse delay-150">Feedback Gen</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground pt-4">This usually takes about 10-20 seconds.</p>
+        </Card>
+      </div>
+    );
+  }
 
   if (interviewEnded) {
     return (
@@ -703,7 +785,7 @@ export default function VoiceAIInterviewRound({
                     {isListening ? (
                       <>
                         <CheckCircle className="w-4 h-4 mr-2" />
-                        Done
+                        Done Speaking
                       </>
                     ) : (
                       <>
@@ -777,10 +859,20 @@ export default function VoiceAIInterviewRound({
                   <Button
                     onClick={handleEndInterview}
                     variant="default"
-                    className="w-full h-12 text-base"
+                    disabled={isLoading || isAnalyzing}
+                    className="w-full h-12 text-base bg-green-600 hover:bg-green-700"
                   >
-                    <CheckCircle className="w-5 h-5 mr-2" />
-                    End Interview
+                    {isAnalyzing ? (
+                      <>
+                        <div className="animate-spin w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full" />
+                        Analyzing Interview...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        End Interview & View Report
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
